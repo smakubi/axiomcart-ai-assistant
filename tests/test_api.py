@@ -8,7 +8,7 @@ client = TestClient(app)
 def test_home_serves_teaching_interface() -> None:
     response = client.get("/")
     assert response.status_code == 200
-    assert "Watch a multi-agent system" in response.text
+    assert "Multi-agent shopping" in response.text
 
 
 def test_graph_metadata_is_key_free() -> None:

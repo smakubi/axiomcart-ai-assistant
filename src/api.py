@@ -26,7 +26,7 @@ PUBLIC_DIR = ROOT_DIR / "public"
 
 app = FastAPI(
     title="AxiomCart Teaching API",
-    description="A modern LangGraph multi-agent shopping assistant.",
+    description="A LangGraph multi-agent shopping assistant.",
     version="1.0.0",
     docs_url="/api/docs",
     redoc_url=None,

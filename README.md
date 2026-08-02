@@ -1,10 +1,8 @@
-# AxiomCart — a visible multi-agent system
+# AxiomCart — Multi-Agent Shopping Assistant
 
-AxiomCart is a classroom-sized shopping assistant built with current LangChain,
-LangGraph, FastAPI, and Python. It is both a working customer experience and a
-live execution visualizer: learners can watch routing, parallel specialist work,
-tool calls, state updates, synthesis, and human-in-the-loop pauses while they
-chat with the system.
+AxiomCart is a Python shopping assistant for teaching LangGraph orchestration.
+It includes product search, order support, parallel routing, checkpointed human
+input, a FastAPI API, and a browser interface that displays node activity.
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/smakubi/axiomcart-ai-assistant)
 

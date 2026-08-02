@@ -8,7 +8,7 @@
       content="A live, teachable LangGraph multi-agent shopping assistant built in Python."
     />
     <meta name="theme-color" content="#f6f8fc" />
-    <title>AxiomCart — Inside the Shopping Agent</title>
+    <title>AxiomCart — Multi-Agent Shopping Assistant</title>
     <link rel="icon" href="/assets/mark.svg" />
     <link rel="stylesheet" href="/assets/styles.css" />
     <script type="module" src="/assets/app.js"></script>
@@ -20,7 +20,7 @@
           <span class="brand-mark" aria-hidden="true">
             <svg viewBox="0 0 24 24"><path d="M6.6 7.2h12.8l-1.1 7.1a2 2 0 0 1-2 1.7H9a2 2 0 0 1-2-1.7L5.7 4.8H3.8M9.2 20h.1m6.6 0h.1" /></svg>
           </span>
-          <span>Inside the Shopping Agent</span>
+          <span>AxiomCart</span>
         </a>
         <div class="header-actions">
           <span class="service-status" id="service-status">
@@ -45,13 +45,13 @@
 
       <section class="hero wrap">
         <div class="eyebrow-row">
-          <span class="eyebrow">LangGraph, made visible</span>
+          <span class="eyebrow">LangGraph teaching application</span>
           <span class="version-chip" id="version-chip">Python · LangGraph</span>
         </div>
-        <h1>Watch a multi-agent system<br />reason, route, and respond.</h1>
+        <h1>Multi-agent shopping<br />assistant.</h1>
         <p>
-          Talk to the storefront on the left. Follow every orchestration decision,
-          specialist handoff, tool call, and human interrupt on the right.
+          Product search, order support, human escalation, and graph execution
+          in one Python application.
         </p>
       </section>
 
@@ -60,8 +60,8 @@
           <div class="panel-heading conversation-heading">
             <div>
               <span class="section-kicker">Conversation</span>
-              <h2 id="conversation-heading">Shop naturally</h2>
-              <p>Try a product question, an order problem, or both at once.</p>
+              <h2 id="conversation-heading">Customer session</h2>
+              <p>Ask about products, orders, or both.</p>
             </div>
             <button class="icon-button" id="reset-button" type="button" aria-label="Start a new conversation" title="New conversation">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.34 5.66M20 4v7h-7" /></svg>
@@ -102,9 +102,9 @@
         <aside class="inspector-panel" aria-labelledby="inspector-heading">
           <div class="panel-heading inspector-heading">
             <div>
-              <span class="section-kicker">Live graph</span>
-              <h2 id="inspector-heading">Execution inspector</h2>
-              <p>Each card maps directly to a Python node.</p>
+              <span class="section-kicker">Execution</span>
+              <h2 id="inspector-heading">Graph activity</h2>
+              <p>Current node status, state, and tool events.</p>
             </div>
             <span class="run-badge" id="run-badge">Ready</span>
           </div>
@@ -149,7 +149,7 @@
 
             <div class="route-explanation" id="route-explanation">
               <span class="route-icon" aria-hidden="true">i</span>
-              <p>Send a message to see the orchestrator's typed routing decision.</p>
+              <p>Routing details appear after the first message.</p>
             </div>
           </div>
 
@@ -176,9 +176,9 @@
 
       <section class="learning-section wrap" aria-labelledby="learning-heading">
         <div class="learning-copy">
-          <span class="section-kicker">Teaching lens</span>
-          <h2 id="learning-heading">One demo, six modern patterns.</h2>
-          <p>The implementation stays small enough to teach in one session, while each boundary is production-shaped and replaceable.</p>
+          <span class="section-kicker">Implementation</span>
+          <h2 id="learning-heading">Core LangGraph patterns</h2>
+          <p>The project focuses on the workflow features used in the application.</p>
         </div>
         <div class="concept-grid">
           <article><span>01</span><h3>Typed routing</h3><p>Pydantic validates the orchestrator's decision before the graph acts on it.</p><code>with_structured_output()</code></article>
@@ -204,7 +204,7 @@
       </details>
 
       <footer class="site-footer wrap">
-        <span>AxiomCart · A visible multi-agent system</span>
+        <span>AxiomCart</span>
         <span>Python · LangChain · LangGraph · FastAPI</span>
       </footer>
     </main>
@@ -217,7 +217,7 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
           </button>
         </div>
-        <p class="settings-intro">Use the deployment owner's server key, or provide your own for this browser session.</p>
+        <p class="settings-intro">Use the server key or add an OpenAI key for this browser session.</p>
 
         <label class="field">
           <span>OpenAI API key <small>session only</small></span>

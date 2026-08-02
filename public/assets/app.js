@@ -74,8 +74,8 @@ function renderWelcome() {
         <span class="welcome-orb" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="M4 7h16l-2 11H6L4 7Zm3 0a5 5 0 0 1 10 0M9 21h.01M15 21h.01" /></svg>
         </span>
-        <h3>Your storefront is ready</h3>
-        <p>Choose an example above or ask your own question. The graph inspector will light up as Python runs each node.</p>
+        <h3>Start a conversation</h3>
+        <p>Use a sample query or enter your own. Node activity appears in the graph panel.</p>
       </div>
     </div>`;
 }
@@ -340,7 +340,7 @@ async function loadHealth() {
     const health = await response.json();
     state.serverKeyConfigured = health.server_key_configured;
     elements.serviceStatus.dataset.status = "ready";
-    elements.serviceStatus.lastElementChild.textContent = "Python agent ready";
+    elements.serviceStatus.lastElementChild.textContent = "API ready";
     elements.versionChip.textContent = `Python ${health.python} · LangGraph ${health.langgraph}`;
     elements.serverKeyNote.dataset.status = health.server_key_configured ? "ready" : "local";
     elements.serverKeyNote.lastElementChild.textContent = health.server_key_configured
