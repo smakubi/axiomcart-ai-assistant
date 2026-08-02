@@ -13,13 +13,15 @@ source-backed architecture explorer.
   `create_agent()` abstraction.
 - Upgraded the parent graph to typed structured routing, `Command`, parallel
   `Send`, reducers, `interrupt()`, and version 2 streaming events.
+- Compiled product and support as child graphs that hand results back with
+  `Command.PARENT`.
 - Removed import-time API-key exits and heavy vector-store initialization.
 - Added a FastAPI streaming API that accepts a deployment key or a learner's
   session-only key.
-- Uses the open-weight Inkling model through Baseten for graph reasoning and
-  OpenAI only at the speech boundaries.
-- Added microphone recording, transcription, and spoken responses. Keyboard
-  input remains available as a secondary control.
+- Uses deterministic graph paths for explicit requests and the open-weight
+  Inkling model through Baseten only when a turn needs model reasoning.
+- Added a continuous microphone session, turn detection, transcription, and
+  spoken responses. Keyboard input remains available as a secondary control.
 - Added an architecture page and clickable graph nodes that display the exact
   Python running in the application.
 - Added a responsive teaching UI inspired by the clean, two-pane Voice AI demo.
@@ -33,18 +35,19 @@ START
   ▼
 orchestrator ── structured RoutingDecision
   │
-  ├── Send(product_agent) ── search_product_catalog ──┐
+  ├── Send(product_agent subgraph) ── catalog tools ──┐
   │                                                   │
-  └── Send(support_agent) ── interrupt / order tools ─┤
+  └── Send(support_agent subgraph) ── interrupt ──────┤
                                                       ▼
-                                                synthesizer
+                                      Command.PARENT → synthesizer
                                                       │
                                                      END
 ```
 
-The parent workflow stays explicit in `src/graph.py` and `src/nodes.py` so it
-is easy to teach. Each specialist delegates its model/tool loop to
-`create_agent()`, which keeps the example aligned with current LangChain APIs.
+The parent workflow stays explicit in `src/graph.py`. `src/subgraphs.py`
+compiles each specialist as a child workflow. Explicit catalog and order
+requests take a deterministic tool path; `create_agent()` owns the specialist
+model/tool loop when the request needs judgment.
 
 ## Run locally
 
@@ -105,6 +108,7 @@ src/config.py            Per-run model context; no import-time side effects
 src/data.py              Small catalog and order fixtures
 src/graph.py             Graph construction and checkpoint injection
 src/nodes.py             Orchestrator, specialists, and synthesizer
+src/subgraphs.py         Compiled specialist child graphs
 src/state.py             Typed shared state and reducers
 src/tools.py             Deterministic, structured tools
 src/main.py              Optional CLI using the same graph
@@ -122,8 +126,9 @@ OpenAI key is scoped to one run and is never assigned to a module-level client.
 
 ### Structured routing
 
-The orchestrator validates its output with the `RoutingDecision` Pydantic model.
-The graph never parses agent names out of free-form text.
+Explicit commerce intent is routed locally to avoid an unnecessary model round
+trip. Ambiguous intent uses a `RoutingDecision` Pydantic model, so the graph
+never parses agent names out of free-form text.
 
 ### Parallel fan-out and fan-in
 
@@ -131,11 +136,17 @@ The orchestrator returns `Command(goto=[Send(...), ...])`. The
 `agent_results` reducer merges writes from specialists that execute in the same
 super-step. The synthesizer receives the combined results.
 
+### Specialist subgraphs
+
+Product and support are compiled `StateGraph` child workflows registered as
+nodes in the parent. They inherit runtime context and checkpointing, then use
+`Command.PARENT` to route their reduced result to the parent synthesizer.
+
 ### Maintained agent loops
 
-Product and support specialists use `create_agent()`. The example teaches the
-agent abstraction without reimplementing tool selection, execution, and retry
-plumbing.
+Product and support specialists use `create_agent()` when a request needs model
+judgment. Common catalog and order lookups use the same typed tools directly.
+This contrast makes the cost and purpose of an agent loop visible to learners.
 
 ### Human-in-the-loop
 
@@ -150,10 +161,12 @@ JSON. Custom events from nodes and tools power the live browser inspector.
 
 ### Voice boundaries
 
-The browser records audio with `MediaRecorder`. FastAPI sends the recording to
-OpenAI transcription, runs the resulting text through the same LangGraph, and
-returns generated speech. If hosted speech playback fails, the browser speech
-API is used as a fallback.
+The browser keeps one microphone stream open, records a turn with
+`MediaRecorder`, and sends it after a short silence. It automatically resumes
+listening after the spoken answer. FastAPI uses `gpt-4o-mini-transcribe` and
+runs the text through LangGraph. Natural `gpt-4o-mini-tts` PCM speech is streamed
+to the browser and begins playing while the remaining audio arrives. The live
+trace reports input, transcription, graph, and speech-start duration separately.
 
 ### Source-backed architecture
 
@@ -208,6 +221,7 @@ uv run python -m compileall src api
 ## Further reading
 
 - [LangGraph graph API](https://docs.langchain.com/oss/python/langgraph/graph-api)
+- [LangGraph subgraphs](https://docs.langchain.com/oss/python/langgraph/use-subgraphs)
 - [LangGraph streaming](https://docs.langchain.com/oss/python/langgraph/streaming)
 - [LangGraph interrupts](https://docs.langchain.com/oss/python/langgraph/interrupts)
 - [LangChain agents](https://docs.langchain.com/oss/python/langchain/agents)

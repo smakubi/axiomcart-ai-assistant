@@ -10,8 +10,8 @@
     <meta name="theme-color" content="#f6f8fc" />
     <title>AxiomCart — Multi-Agent Shopping Assistant</title>
     <link rel="icon" href="/assets/mark.svg" />
-    <link rel="stylesheet" href="/assets/styles.css" />
-    <script type="module" src="/assets/app.js"></script>
+    <link rel="stylesheet" href="/assets/styles.css?v=20260802-8" />
+    <script type="module" src="/assets/app.js?v=20260802-8"></script>
   </head>
   <body>
     <main class="page-shell">
@@ -57,34 +57,46 @@
           <div class="panel-heading conversation-heading">
             <div>
               <span class="section-kicker">Conversation</span>
-              <h2 id="conversation-heading">Voice session</h2>
-              <p>Press the microphone, speak, then press again to send.</p>
+              <h2 id="conversation-heading">Speak naturally</h2>
+              <p>Start once. The microphone resumes after every answer.</p>
             </div>
             <button class="icon-button" id="reset-button" type="button" aria-label="Start a new conversation" title="New conversation">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.34 5.66M20 4v7h-7" /></svg>
             </button>
           </div>
 
-          <div class="prompt-strip" id="prompt-strip" aria-label="Example questions">
-            <button type="button" data-prompt="Show me wireless headphones under $300">Find headphones</button>
-            <button type="button" data-prompt="Where is order ORD102?">Track ORD102</button>
-            <button type="button" data-prompt="Order ORD102 is late. Show me Sony alternatives too.">Run both agents</button>
-          </div>
-
-          <div class="voice-console" id="voice-console" data-stage="idle">
-            <button class="voice-button" id="voice-button" type="button" aria-label="Start recording">
+          <div class="voice-console" id="voice-console" data-stage="idle" data-session="inactive">
+            <button class="voice-button" id="voice-button" type="button" aria-label="Start voice conversation">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a4 4 0 0 0 4-4V6a4 4 0 1 0-8 0v5a4 4 0 0 0 4 4Z" /><path d="M5 10.5V11a7 7 0 0 0 14 0v-.5M12 18v3m-4 0h8" /></svg>
               <span class="voice-bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+              <span class="voice-stop" aria-hidden="true"></span>
             </button>
             <div class="voice-copy">
-              <span id="voice-stage-label">Ready</span>
-              <strong id="voice-status">Press the microphone to speak</strong>
-              <p id="voice-detail">Audio is transcribed, processed by the graph, and returned as speech.</p>
+              <span id="voice-stage-label">Voice input</span>
+              <strong id="voice-status">Start voice conversation</strong>
+              <p id="voice-detail">Speak normally. It keeps listening until you end the conversation.</p>
             </div>
             <button class="voice-reply-toggle" id="voice-reply-toggle" type="button" aria-pressed="true">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Zm4 4a4 4 0 0 1 0 6m2.5-8.5a7 7 0 0 1 0 11" /></svg>
               <span>Voice replies on</span>
             </button>
+          </div>
+
+          <div class="latency-trace" aria-label="Latest voice turn timing">
+            <article data-latency-stage="input"><span>01</span><div><strong>Listen</strong><small>Turn detection</small></div><b id="latency-input">Ready</b></article>
+            <i aria-hidden="true">→</i>
+            <article data-latency-stage="transcription"><span>02</span><div><strong>Transcribe</strong><small>Audio to text</small></div><b id="latency-transcription">Ready</b></article>
+            <i aria-hidden="true">→</i>
+            <article data-latency-stage="graph"><span>03</span><div><strong>Reason</strong><small>Graph execution</small></div><b id="latency-graph">Ready</b></article>
+            <i aria-hidden="true">→</i>
+            <article data-latency-stage="speech"><span>04</span><div><strong>Speak</strong><small>Text to audio</small></div><b id="latency-speech">Ready</b></article>
+          </div>
+
+          <div class="prompt-strip" id="prompt-strip" aria-label="Example questions">
+            <span>Or try an example</span>
+            <button type="button" data-prompt="Show me wireless headphones under $300">Find headphones</button>
+            <button type="button" data-prompt="Where is order ORD102?">Track ORD102</button>
+            <button type="button" data-prompt="Order ORD102 is late. Show me Sony alternatives too.">Run both agents</button>
           </div>
 
           <div class="transcript" id="transcript" aria-live="polite" aria-label="Conversation transcript"></div>
@@ -123,7 +135,7 @@
             <div>
               <span class="section-kicker">Execution</span>
               <h2 id="inspector-heading">Graph activity</h2>
-              <p>Current node status, state, and tool events.</p>
+              <p>Current node status, duration, state, and tool events.</p>
             </div>
             <span class="run-badge" id="run-badge">Ready</span>
           </div>
@@ -138,8 +150,8 @@
             <div class="graph-board" aria-label="LangGraph execution diagram">
               <article class="node-card node-orchestrator" data-node="orchestrator" data-status="ready" role="button" tabindex="0" aria-label="View orchestrator source code">
                 <span class="node-icon"><svg viewBox="0 0 24 24"><path d="M12 3v5m0 8v5M5 12H2m20 0h-3M7.1 7.1 4.9 4.9m14.2 14.2-2.2-2.2M16.9 7.1l2.2-2.2M4.9 19.1l2.2-2.2" /><circle cx="12" cy="12" r="4" /></svg></span>
-                <div><span class="node-step">01 · Route</span><h3>Orchestrator</h3><code>structured output</code></div>
-                <span class="node-status">Ready</span>
+                <div><span class="node-step">01 · Route</span><h3>Orchestrator</h3><code>rules → structured model</code></div>
+                <span class="node-metric"><span class="node-status">Ready</span><small class="node-latency">—</small></span>
               </article>
 
               <div class="graph-branch" aria-hidden="true"><span></span><span></span><span></span></div>
@@ -147,13 +159,13 @@
               <div class="agent-grid">
                 <article class="node-card" data-node="product_agent" data-status="ready" role="button" tabindex="0" aria-label="View product agent source code">
                   <span class="node-icon"><svg viewBox="0 0 24 24"><path d="M3 6h18l-2 12H5L3 6Zm4 0a5 5 0 0 1 10 0" /></svg></span>
-                  <div><span class="node-step">02A · Discover</span><h3>Product agent</h3><code>create_agent + tools</code></div>
-                  <span class="node-status">Ready</span>
+                  <div><span class="node-step">02A · Discover</span><h3>Product agent</h3><code>fast tool path → agent</code></div>
+                  <span class="node-metric"><span class="node-status">Ready</span><small class="node-latency">—</small></span>
                 </article>
                 <article class="node-card" data-node="support_agent" data-status="ready" role="button" tabindex="0" aria-label="View support agent source code">
                   <span class="node-icon"><svg viewBox="0 0 24 24"><path d="M4 13a8 8 0 0 1 16 0v6a2 2 0 0 1-2 2h-3v-7h5M4 13v7H2a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h2m8 9h3" /></svg></span>
-                  <div><span class="node-step">02B · Resolve</span><h3>Support agent</h3><code>interrupt + resume</code></div>
-                  <span class="node-status">Ready</span>
+                  <div><span class="node-step">02B · Resolve</span><h3>Support agent</h3><code>fast lookup → agent</code></div>
+                  <span class="node-metric"><span class="node-status">Ready</span><small class="node-latency">—</small></span>
                 </article>
               </div>
 
@@ -161,8 +173,8 @@
 
               <article class="node-card" data-node="synthesizer" data-status="ready" role="button" tabindex="0" aria-label="View synthesizer source code">
                 <span class="node-icon"><svg viewBox="0 0 24 24"><path d="M4 5h16M7 10h10M9 15h6M11 20h2" /></svg></span>
-                <div><span class="node-step">03 · Respond</span><h3>Synthesizer</h3><code>parallel fan-in</code></div>
-                <span class="node-status">Ready</span>
+                <div><span class="node-step">03 · Respond</span><h3>Synthesizer</h3><code>zero-model fan-in</code></div>
+                <span class="node-metric"><span class="node-status">Ready</span><small class="node-latency">—</small></span>
               </article>
             </div>
 
@@ -203,12 +215,12 @@
           <p>The project focuses on the workflow features used in the application.</p>
         </div>
         <div class="concept-grid">
-          <a href="/architecture#orchestrator"><article><span>01</span><h3>Typed routing</h3><p>Pydantic validates the orchestrator's decision before the graph acts on it.</p><code>with_structured_output()</code></article></a>
-          <a href="/architecture#orchestrator"><article><span>02</span><h3>Parallel fan-out</h3><p><code>Send</code> starts product and support work in the same super-step.</p><code>Command(goto=[Send(...)])</code></article></a>
-          <a href="/architecture#product_agent"><article><span>03</span><h3>Agent abstraction</h3><p>Specialists use LangChain's maintained tool loop instead of custom plumbing.</p><code>create_agent()</code></article></a>
-          <a href="/architecture#support_agent"><article><span>04</span><h3>Human input</h3><p>The support node pauses and resumes from an exact checkpoint.</p><code>interrupt() · Command(resume)</code></article></a>
-          <a href="/architecture#graph"><article><span>05</span><h3>Live streaming</h3><p>Custom graph events drive this inspector as each node executes.</p><code>astream(version="v2")</code></article></a>
-          <a href="/architecture#graph"><article><span>06</span><h3>Deployable Python</h3><p>FastAPI serves the UI and graph from one Vercel project.</p><code>api/*.py</code></article></a>
+          <button class="concept-card" type="button" data-component="orchestrator"><span>01</span><h3>Typed routing</h3><p>Pydantic validates the orchestrator's decision before the graph acts on it.</p><code>with_structured_output()</code><small>View Python →</small></button>
+          <button class="concept-card" type="button" data-component="orchestrator"><span>02</span><h3>Parallel fan-out</h3><p><code>Send</code> starts product and support work in the same super-step.</p><code>Command(goto=[Send(...)])</code><small>View Python →</small></button>
+          <button class="concept-card" type="button" data-component="subgraphs"><span>03</span><h3>Specialist subgraphs</h3><p>Each specialist is a compiled child workflow with a parent handoff.</p><code>Command.PARENT</code><small>View Python →</small></button>
+          <button class="concept-card" type="button" data-component="product_agent"><span>04</span><h3>Agent abstraction</h3><p>Specialists use LangChain's maintained tool loop instead of custom plumbing.</p><code>create_agent()</code><small>View Python →</small></button>
+          <button class="concept-card" type="button" data-component="support_agent"><span>05</span><h3>Human input</h3><p>The support subgraph pauses and resumes from an exact checkpoint.</p><code>interrupt() · Command(resume)</code><small>View Python →</small></button>
+          <button class="concept-card" type="button" data-component="graph"><span>06</span><h3>Live streaming</h3><p>Parent and child graph events drive the inspector during execution.</p><code>astream(subgraphs=True)</code><small>View Python →</small></button>
         </div>
       </section>
 

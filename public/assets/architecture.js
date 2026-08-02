@@ -1,3 +1,5 @@
+import { highlightPython } from "./python-highlight.js?v=20260802-8";
+
 const elements = {
   voicePipeline: document.querySelector("#voice-pipeline"),
   componentList: document.querySelector("#component-list"),
@@ -40,7 +42,7 @@ function selectComponent(componentId, { updateHash = true } = {}) {
   elements.sourceTitle.textContent = component.title;
   elements.sourcePath.textContent = component.path;
   elements.sourceRole.textContent = component.role;
-  elements.sourceCode.textContent = component.source;
+  elements.sourceCode.innerHTML = highlightPython(component.source);
   if (updateHash) history.replaceState(null, "", `#${component.id}`);
 }
 
@@ -66,6 +68,14 @@ async function loadArchitecture() {
 document.addEventListener("click", (event) => {
   const button = event.target.closest("[data-component]");
   if (button && manifest) selectComponent(button.dataset.component);
+});
+
+document.addEventListener("keydown", (event) => {
+  const component = event.target.closest("[data-component][role='button']");
+  if (component && (event.key === "Enter" || event.key === " ")) {
+    event.preventDefault();
+    selectComponent(component.dataset.component);
+  }
 });
 
 elements.copySource.addEventListener("click", async () => {

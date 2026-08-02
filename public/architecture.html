@@ -7,8 +7,8 @@
     <meta name="theme-color" content="#f6f8fc" />
     <title>AxiomCart — System Architecture</title>
     <link rel="icon" href="/assets/mark.svg" />
-    <link rel="stylesheet" href="/assets/styles.css" />
-    <script type="module" src="/assets/architecture.js"></script>
+    <link rel="stylesheet" href="/assets/styles.css?v=20260802-8" />
+    <script type="module" src="/assets/architecture.js?v=20260802-8"></script>
   </head>
   <body>
     <main class="page-shell architecture-page">
@@ -34,7 +34,7 @@
       <section class="architecture-section wrap" aria-labelledby="voice-path-heading">
         <div class="architecture-section-heading">
           <div><span class="section-kicker">Input and output</span><h2 id="voice-path-heading">Voice path</h2></div>
-          <p>Inkling handles graph reasoning through Baseten. OpenAI handles the two speech boundaries.</p>
+          <p>Common requests use deterministic graph paths. Inkling handles ambiguous turns; natural speech streams as it is generated.</p>
         </div>
         <div class="voice-pipeline" id="voice-pipeline" aria-label="Voice processing pipeline"></div>
       </section>
@@ -47,9 +47,12 @@
         <div class="architecture-graph" aria-label="AxiomCart graph flow">
           <button data-component="orchestrator"><span>01</span><strong>Orchestrator</strong><code>RoutingDecision</code></button>
           <div class="architecture-fork" aria-hidden="true"></div>
-          <div class="architecture-agents">
+          <div class="architecture-subgraphs" data-component="subgraphs" role="button" tabindex="0" aria-label="View specialist subgraph source code">
+            <span>Compiled specialist subgraphs</span>
+            <div class="architecture-agents">
             <button data-component="product_agent"><span>02A</span><strong>Product agent</strong><code>catalog tools</code></button>
             <button data-component="support_agent"><span>02B</span><strong>Support agent</strong><code>orders + interrupt</code></button>
+            </div>
           </div>
           <div class="architecture-fork architecture-merge" aria-hidden="true"></div>
           <button data-component="synthesizer"><span>03</span><strong>Synthesizer</strong><code>parallel fan-in</code></button>

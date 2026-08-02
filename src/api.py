@@ -8,11 +8,12 @@ import platform
 from collections.abc import AsyncIterator
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
+from time import perf_counter
 from typing import Annotated, Literal
 from uuid import uuid4
 
 from fastapi import FastAPI, File, Header, HTTPException, UploadFile
-from fastapi.responses import HTMLResponse, Response, StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.types import Command
@@ -32,8 +33,11 @@ from src.graph import axiomcart_graph
 ROOT_DIR = Path(__file__).resolve().parents[1]
 PUBLIC_DIR = ROOT_DIR / "public"
 MAX_AUDIO_BYTES = 10 * 1024 * 1024
-TRANSCRIPTION_MODEL = "gpt-transcribe"
+TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe"
 SPEECH_MODEL = "gpt-4o-mini-tts"
+SPEECH_VOICE = "marin"
+SPEECH_CHUNK_BYTES = 4_096
+SPEECH_SAMPLE_RATE = 24_000
 
 app = FastAPI(
     title="AxiomCart Teaching API",
@@ -118,6 +122,7 @@ async def graph_events(
     request: ChatRequest,
     model_config: ModelConfig,
 ) -> AsyncIterator[bytes]:
+    started_at = perf_counter()
     run_id = uuid4().hex
     config = {"configurable": {"thread_id": request.thread_id}}
     context = AgentContext(
@@ -133,6 +138,7 @@ async def graph_events(
             "thread_id": request.thread_id,
             "model": model_config.model_name,
             "provider": model_config.provider,
+            "elapsed_ms": 0,
         }
     )
 
@@ -167,7 +173,13 @@ async def graph_events(
             part_type = part.get("type")
             data = part.get("data")
             if part_type == "custom" and isinstance(data, dict):
-                yield encode_event({"type": "graph.event", **data})
+                yield encode_event(
+                    {
+                        "type": "graph.event",
+                        "elapsed_ms": round((perf_counter() - started_at) * 1000),
+                        **data,
+                    }
+                )
                 continue
             if part_type != "updates" or not isinstance(data, dict):
                 continue
@@ -191,6 +203,7 @@ async def graph_events(
                     "type": "run.interrupted",
                     "run_id": run_id,
                     "thread_id": request.thread_id,
+                    "elapsed_ms": round((perf_counter() - started_at) * 1000),
                     **pending_interrupt,
                 }
             )
@@ -211,6 +224,7 @@ async def graph_events(
                 "route": route,
                 "routing_reason": routing_reason,
                 "agent_results": results,
+                "elapsed_ms": round((perf_counter() - started_at) * 1000),
             }
         )
     except Exception as error:
@@ -219,6 +233,7 @@ async def graph_events(
                 "type": "run.error",
                 "run_id": run_id,
                 "message": str(error),
+                "elapsed_ms": round((perf_counter() - started_at) * 1000),
             }
         )
 
@@ -247,6 +262,7 @@ async def health() -> dict:
         "langchain": package_version("langchain"),
         "transcription_model": TRANSCRIPTION_MODEL,
         "speech_model": SPEECH_MODEL,
+        "speech_voice": SPEECH_VOICE,
     }
 
 
@@ -321,6 +337,7 @@ async def transcribe_audio(
     audio: Annotated[UploadFile, File()],
     learner_key: Annotated[str | None, Header(alias="X-OpenAI-API-Key")] = None,
 ) -> dict:
+    started_at = perf_counter()
     contents = await audio.read(MAX_AUDIO_BYTES + 1)
     if not contents:
         raise HTTPException(status_code=400, detail="Record some audio first.")
@@ -331,27 +348,48 @@ async def transcribe_audio(
     transcription = await client.audio.transcriptions.create(
         model=TRANSCRIPTION_MODEL,
         file=(audio.filename or "recording.webm", contents, audio.content_type or "audio/webm"),
+        language="en",
     )
-    return {"text": transcription.text.strip()}
+    return {
+        "text": transcription.text.strip(),
+        "latency_ms": round((perf_counter() - started_at) * 1000),
+    }
+
+
+async def speech_audio(text: str, api_key: str) -> AsyncIterator[bytes]:
+    """Stream natural speech bytes as OpenAI produces them."""
+    client = AsyncOpenAI(api_key=api_key)
+    async with client.audio.speech.with_streaming_response.create(
+        model=SPEECH_MODEL,
+        voice=SPEECH_VOICE,
+        input=text,
+        instructions=(
+            "Speak with a warm, natural, confident retail-assistant voice. "
+            "Use conversational pacing and avoid an announcer-like delivery."
+        ),
+        response_format="pcm",
+        stream_format="audio",
+    ) as response:
+        async for chunk in response.iter_bytes(chunk_size=SPEECH_CHUNK_BYTES):
+            yield chunk
 
 
 @app.post("/api/voice/speak")
 async def speak_text(
     request: SpeechRequest,
     learner_key: Annotated[str | None, Header(alias="X-OpenAI-API-Key")] = None,
-) -> Response:
-    client = AsyncOpenAI(api_key=resolve_speech_key(learner_key))
-    speech = await client.audio.speech.create(
-        model=SPEECH_MODEL,
-        voice="coral",
-        input=request.text,
-        instructions="Speak clearly and naturally at a concise conversational pace.",
-        response_format="mp3",
-    )
-    return Response(
-        content=speech.content,
-        media_type="audio/mpeg",
-        headers={"Cache-Control": "no-store"},
+) -> StreamingResponse:
+    api_key = resolve_speech_key(learner_key)
+    return StreamingResponse(
+        speech_audio(request.text, api_key),
+        media_type="audio/pcm",
+        headers={
+            "Cache-Control": "no-store",
+            "X-Speech-Model": SPEECH_MODEL,
+            "X-Speech-Voice": SPEECH_VOICE,
+            "X-Audio-Sample-Rate": str(SPEECH_SAMPLE_RATE),
+            "X-Accel-Buffering": "no",
+        },
     )
 
 

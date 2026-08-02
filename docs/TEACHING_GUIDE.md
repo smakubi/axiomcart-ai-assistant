@@ -11,10 +11,11 @@ By the end, learners should be able to explain:
 2. How LangGraph state moves between nodes.
 3. Why reducers are required when parallel branches write the same key.
 4. How `Send` creates parallel work and how branches converge.
-5. What a checkpointer stores and why `interrupt()` depends on it.
-6. How streamed graph events become a responsive product interface.
-7. Where voice transcription and speech synthesis sit outside the graph.
-8. How runtime code can be presented directly inside a teaching interface.
+5. How a compiled subgraph becomes a node in a parent workflow.
+6. What a checkpointer stores and why `interrupt()` depends on it.
+7. How streamed graph events become a responsive product interface.
+8. Where voice transcription and speech synthesis sit outside the graph.
+9. How runtime code can be presented directly inside a teaching interface.
 
 ## Before class
 
@@ -65,14 +66,18 @@ Select the live **Orchestrator** graph card to open its deployed Python source.
 Run the mixed prompt again. Product and support cards should become active
 without a fixed sequence.
 
-### 32–44 min — Agents and tools
+### 32–44 min — Subgraphs, agents, and tools
 
-Open `/architecture`, then compare **Product agent** and **Tools**.
+Click **Specialist subgraphs**, then compare **Product agent** and **Tools**.
 
-Contrast two responsibilities:
+Contrast three responsibilities:
 
 - LangGraph owns workflow topology and shared state.
+- A compiled child graph packages one specialist workflow as a parent node.
 - `create_agent()` owns the specialist's model/tool loop.
+
+Show how `Command.PARENT` returns a reduced result to the parent synthesizer,
+and how the parent's checkpointer propagates into each child graph.
 
 The catalog search is deterministic so the class can read its ranking logic.
 Discuss how a vector database could replace the implementation while preserving

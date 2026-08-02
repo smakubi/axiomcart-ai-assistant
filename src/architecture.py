@@ -5,8 +5,17 @@ from __future__ import annotations
 from inspect import getsource
 
 from src.graph import build_graph
-from src.nodes import orchestrator, product_agent, support_agent, synthesizer
+from src.nodes import (
+    deterministic_routing_decision,
+    format_order_result,
+    format_product_results,
+    orchestrator,
+    product_agent,
+    support_agent,
+    synthesizer,
+)
 from src.state import AxiomCartState, RoutingDecision
+from src.subgraphs import build_specialist_subgraph
 from src.tools import escalate_to_human, get_order_status, search_product_catalog
 
 
@@ -36,26 +45,26 @@ def architecture_manifest() -> dict:
             {
                 "id": "audio-input",
                 "title": "Audio input",
-                "detail": "MediaRecorder captures a short browser recording.",
+                "detail": "The browser keeps one microphone session open and detects each turn.",
                 "technology": "MediaRecorder",
             },
             {
                 "id": "transcription",
                 "title": "Transcription",
                 "detail": "OpenAI converts the recording to text for the graph.",
-                "technology": "gpt-transcribe",
+                "technology": "gpt-4o-mini-transcribe",
             },
             {
                 "id": "reasoning",
                 "title": "Graph execution",
-                "detail": "Inkling routes the request and runs the relevant specialists.",
-                "technology": "LangGraph + Inkling",
+                "detail": "Explicit requests take a deterministic path; Inkling handles ambiguity.",
+                "technology": "LangGraph + optional Inkling",
             },
             {
                 "id": "speech-output",
                 "title": "Speech output",
-                "detail": "OpenAI produces the spoken answer returned to the browser.",
-                "technology": "gpt-4o-mini-tts",
+                "detail": "Natural PCM speech begins playing while the remaining bytes arrive.",
+                "technology": "streamed gpt-4o-mini-tts",
             },
         ],
         "graph_flow": [
@@ -81,7 +90,18 @@ def architecture_manifest() -> dict:
                 "Produces a validated routing decision and fans work out in parallel.",
                 "with_structured_output + Command + Send",
                 "src/nodes.py",
+                deterministic_routing_decision,
                 orchestrator,
+            ),
+            _component(
+                "subgraphs",
+                "Specialist subgraphs",
+                "Compiles each specialist as a child workflow that inherits parent context "
+                "and returns results with Command.PARENT.",
+                "StateGraph + Command.PARENT",
+                "src/subgraphs.py",
+                build_specialist_subgraph,
+                product_agent,
             ),
             _component(
                 "product_agent",
@@ -89,6 +109,7 @@ def architecture_manifest() -> dict:
                 "Runs the catalog specialist with LangChain's maintained agent loop.",
                 "create_agent + search_product_catalog",
                 "src/nodes.py",
+                format_product_results,
                 product_agent,
             ),
             _component(
@@ -97,6 +118,7 @@ def architecture_manifest() -> dict:
                 "Looks up orders and pauses for missing customer information.",
                 "create_agent + interrupt",
                 "src/nodes.py",
+                format_order_result,
                 support_agent,
             ),
             _component(
