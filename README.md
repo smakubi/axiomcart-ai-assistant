@@ -1,0 +1,196 @@
+# AxiomCart — a visible multi-agent system
+
+AxiomCart is a classroom-sized shopping assistant built with current LangChain,
+LangGraph, FastAPI, and Python. It is both a working customer experience and a
+live execution visualizer: learners can watch routing, parallel specialist work,
+tool calls, state updates, synthesis, and human-in-the-loop pauses while they
+chat with the system.
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/smakubi/axiomcart-ai-assistant)
+
+## What changed from the original
+
+- Replaced hand-written model/tool loops with LangChain's maintained
+  `create_agent()` abstraction.
+- Upgraded the parent graph to typed structured routing, `Command`, parallel
+  `Send`, reducers, `interrupt()`, and version 2 streaming events.
+- Removed import-time API-key exits and heavy vector-store initialization.
+- Added a FastAPI streaming API that accepts a deployment key or a learner's
+  session-only key.
+- Added a responsive teaching UI inspired by the clean, two-pane Voice AI demo.
+- Made the UI and Python backend deploy together as one Vercel project.
+
+## Architecture
+
+```text
+START
+  │
+  ▼
+orchestrator ── structured RoutingDecision
+  │
+  ├── Send(product_agent) ── search_product_catalog ──┐
+  │                                                   │
+  └── Send(support_agent) ── interrupt / order tools ─┤
+                                                      ▼
+                                                synthesizer
+                                                      │
+                                                     END
+```
+
+The parent workflow stays explicit in `src/graph.py` and `src/nodes.py` so it
+is easy to teach. Each specialist delegates its model/tool loop to
+`create_agent()`, which keeps the example aligned with current LangChain APIs.
+
+## Run locally
+
+### 1. Install
+
+Python 3.12–3.14 and [uv](https://docs.astral.sh/uv/) are recommended.
+
+```bash
+git clone https://github.com/smakubi/axiomcart-ai-assistant.git
+cd axiomcart-ai-assistant
+uv sync
+```
+
+### 2. Start the product
+
+```bash
+uv run uvicorn src.api:app --reload
+```
+
+Open [http://localhost:8000](http://localhost:8000). Add an OpenAI API key in
+**Settings**. The key is stored only in browser `sessionStorage` and sent to
+your own Python deployment for each run.
+
+You can instead configure a server key:
+
+```bash
+cp .env.example .env
+# Add OPENAI_API_KEY to .env
+uv run uvicorn src.api:app --reload
+```
+
+### 3. Run the CLI (optional)
+
+```bash
+export OPENAI_API_KEY=sk-...
+uv run python -m src.main
+```
+
+## Good demo prompts
+
+| Prompt | Concept to point out |
+| --- | --- |
+| `Show me wireless headphones under ₹15,000` | One specialist and a catalog tool |
+| `Where is order ORD102?` | One specialist and an order lookup |
+| `Order ORD102 is late. Show me Sony alternatives too.` | Parallel `Send` fan-out and synthesis |
+| `I need help with an order` | `interrupt()` and `Command(resume=...)` |
+
+Sample order IDs are `ORD101` through `ORD104`.
+
+## Project map
+
+```text
+api/*.py                 Thin Vercel route entrypoints
+public/                  Zero-build web interface
+src/api.py               FastAPI routes and NDJSON event stream
+src/config.py            Per-run model context; no import-time side effects
+src/data.py              Small catalog and order fixtures
+src/graph.py             Graph construction and checkpoint injection
+src/nodes.py             Orchestrator, specialists, and synthesizer
+src/state.py             Typed shared state and reducers
+src/tools.py             Deterministic, structured tools
+src/main.py              Optional CLI using the same graph
+tests/                   Fast, key-free unit tests
+docs/TEACHING_GUIDE.md   A ready-to-use lesson plan
+```
+
+## Modern LangGraph patterns in this repo
+
+### Context instead of globals
+
+`AgentContext` carries the API key and model name through the graph's
+`context_schema`. A learner key is scoped to one run and is never assigned to a
+module-level client.
+
+### Structured routing
+
+The orchestrator validates its output with the `RoutingDecision` Pydantic model.
+The graph never parses agent names out of free-form text.
+
+### Parallel fan-out and fan-in
+
+The orchestrator returns `Command(goto=[Send(...), ...])`. The
+`agent_results` reducer merges writes from specialists that execute in the same
+super-step. The synthesizer receives the combined results.
+
+### Maintained agent loops
+
+Product and support specialists use `create_agent()`. The example teaches the
+agent abstraction without reimplementing tool selection, execution, and retry
+plumbing.
+
+### Human-in-the-loop
+
+The support node calls `interrupt()` when no order identifier is present. The
+graph checkpoint stores the paused execution. The next API request uses
+`Command(resume=...)` and continues from that node.
+
+### Typed version 2 streaming
+
+FastAPI consumes `graph.astream(..., version="v2")` and emits newline-delimited
+JSON. Custom events from nodes and tools power the live browser inspector.
+
+## Deploy to Vercel
+
+Click **Deploy with Vercel** above or import the repository in Vercel. No custom
+build command is required. Vercel maps the thin files in `api/` to functions;
+each imports the same FastAPI application. Files in `public/` are served at the
+same origin.
+
+Optional environment variables:
+
+| Variable | Purpose |
+| --- | --- |
+| `OPENAI_API_KEY` | Shared deployment key; omit for learner-provided keys |
+| `OPENAI_MODEL` | CLI default model |
+| `LOG_LEVEL` | Python logging level |
+
+The included `vercel.json` gives the graph function a 300-second maximum
+duration.
+
+## Persistence note
+
+The zero-infrastructure version uses `InMemorySaver`, which is ideal for local
+teaching and warm Vercel instances. Production applications that must resume an
+interrupt after a cold start should replace it with a durable checkpointer such
+as `AsyncPostgresSaver`. `build_graph(checkpointer=...)` is already injectable
+for that upgrade.
+
+## Catalog retrieval note
+
+The catalog tool uses transparent lexical ranking so deployment is fast and the
+class can inspect every scoring rule. `search_product_catalog` is intentionally
+the retrieval boundary: swap its internals for a vector store without changing
+the agent or graph. This makes the architectural lesson separate from the
+embedding-database lesson.
+
+## Validation
+
+```bash
+uv run ruff check .
+uv run pytest
+uv run python -m compileall src api
+```
+
+## Further reading
+
+- [LangGraph graph API](https://docs.langchain.com/oss/python/langgraph/graph-api)
+- [LangGraph streaming](https://docs.langchain.com/oss/python/langgraph/streaming)
+- [LangGraph interrupts](https://docs.langchain.com/oss/python/langgraph/interrupts)
+- [LangChain agents](https://docs.langchain.com/oss/python/langchain/agents)
+- [Vercel Python runtime](https://vercel.com/docs/functions/runtimes/python)
+
+The original PDF instructor guide remains in `instructor_guide/` for provenance;
+the current lesson plan is `docs/TEACHING_GUIDE.md`.

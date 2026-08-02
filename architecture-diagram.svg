@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="460" viewBox="0 0 1120 460" role="img" aria-labelledby="title description">
+  <title id="title">AxiomCart LangGraph architecture</title>
+  <description id="description">The orchestrator sends work in parallel to product and support agents, which converge at a synthesizer.</description>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f8fafc"/><stop offset="1" stop-color="#eff6ff"/></linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#0f172a" flood-opacity=".08"/></filter>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0 0 8 4 0 8Z" fill="#94a3b8"/></marker>
+  </defs>
+  <rect width="1120" height="460" rx="32" fill="url(#background)"/>
+  <g fill="none" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrow)">
+    <path d="M270 230H370"/><path d="M570 230c85 0 65-100 140-100"/><path d="M570 230c85 0 65 100 140 100"/><path d="M910 130c55 0 35 100 85 100"/><path d="M910 330c55 0 35-100 85-100"/>
+  </g>
+  <g filter="url(#shadow)" font-family="Inter,Arial,sans-serif">
+    <g><rect x="70" y="175" width="200" height="110" rx="20" fill="#fff" stroke="#dbeafe"/><text x="100" y="215" fill="#2563eb" font-size="12" font-weight="700">INPUT</text><text x="100" y="244" fill="#0f172a" font-size="20" font-weight="700">Customer message</text><text x="100" y="267" fill="#64748b" font-size="12">messages + thread_id</text></g>
+    <g><rect x="370" y="175" width="200" height="110" rx="20" fill="#fff" stroke="#93c5fd"/><text x="400" y="215" fill="#2563eb" font-size="12" font-weight="700">01 · ROUTE</text><text x="400" y="244" fill="#0f172a" font-size="20" font-weight="700">Orchestrator</text><text x="400" y="267" fill="#64748b" font-size="12">Pydantic structured output</text></g>
+    <g><rect x="710" y="75" width="200" height="110" rx="20" fill="#fff" stroke="#a7f3d0"/><text x="740" y="115" fill="#059669" font-size="12" font-weight="700">02A · DISCOVER</text><text x="740" y="144" fill="#0f172a" font-size="20" font-weight="700">Product agent</text><text x="740" y="167" fill="#64748b" font-size="12">create_agent + catalog tool</text></g>
+    <g><rect x="710" y="275" width="200" height="110" rx="20" fill="#fff" stroke="#fde68a"/><text x="740" y="315" fill="#d97706" font-size="12" font-weight="700">02B · RESOLVE</text><text x="740" y="344" fill="#0f172a" font-size="20" font-weight="700">Support agent</text><text x="740" y="367" fill="#64748b" font-size="12">interrupt + order tools</text></g>
+    <g><rect x="950" y="175" width="130" height="110" rx="20" fill="#fff" stroke="#c4b5fd"/><text x="975" y="215" fill="#7c3aed" font-size="12" font-weight="700">03 · FAN-IN</text><text x="975" y="244" fill="#0f172a" font-size="17" font-weight="700">Synthesize</text><text x="975" y="267" fill="#64748b" font-size="11">one answer</text></g>
+  </g>
+</svg>
