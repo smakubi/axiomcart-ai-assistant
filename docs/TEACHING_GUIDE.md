@@ -1,7 +1,7 @@
 # Teaching AxiomCart
 
-This guide is designed for a 60–75 minute live class. The product itself is the
-visual aid: keep the browser and `src/nodes.py` side by side.
+This guide is designed for a 60–75 minute live class. Use the demo, live graph,
+and `/architecture` source explorer as the visual aids.
 
 ## Learning goals
 
@@ -13,6 +13,8 @@ By the end, learners should be able to explain:
 4. How `Send` creates parallel work and how branches converge.
 5. What a checkpointer stores and why `interrupt()` depends on it.
 6. How streamed graph events become a responsive product interface.
+7. Where voice transcription and speech synthesis sit outside the graph.
+8. How runtime code can be presented directly inside a teaching interface.
 
 ## Before class
 
@@ -22,8 +24,8 @@ uv run pytest
 uv run uvicorn src.api:app --reload
 ```
 
-Open `http://localhost:8000`, add your API key in **Settings**, and test these
-four prompts:
+Open `http://localhost:8000`, allow microphone access, and speak these four
+prompts:
 
 - `Show me wireless headphones under $300`
 - `Where is order ORD102?`
@@ -34,7 +36,7 @@ four prompts:
 
 ### 0–10 min — Product first
 
-Run a product query without showing code. Ask the class to describe what they
+Speak a product query without showing code. Ask the class to describe what they
 think happened. Switch the inspector from **Graph** to **Events** and replay the
 sequence.
 
@@ -43,7 +45,7 @@ chain-of-thought.
 
 ### 10–20 min — State is the contract
 
-Open `src/state.py`.
+Open **Architecture**, then select **Typed state**.
 
 - `AxiomCartState` is shared by the parent graph.
 - `WorkerState` is the smaller payload sent to specialists.
@@ -53,7 +55,7 @@ Run the mixed prompt and point to `agent_results` in the State tab.
 
 ### 20–32 min — Structured routing and parallel Send
 
-Open `orchestrator()` in `src/nodes.py`.
+Select the live **Orchestrator** graph card to open its deployed Python source.
 
 1. The model returns `RoutingDecision`, not prose that must be parsed.
 2. Each `AgentTask` becomes a `Send` payload.
@@ -65,7 +67,7 @@ without a fixed sequence.
 
 ### 32–44 min — Agents and tools
 
-Open `product_agent()` and `src/tools.py`.
+Open `/architecture`, then compare **Product agent** and **Tools**.
 
 Contrast two responsibilities:
 
@@ -92,8 +94,8 @@ Explain three rules:
 
 ### 56–65 min — Streaming into a UI
 
-Open `graph_events()` in `src/api.py` and `handleServerEvent()` in
-`public/assets/app.js`.
+Open the **Events** and **State** tabs. Point out provider, model, elapsed time,
+node status, and tool events while a spoken request runs.
 
 The backend streams two categories:
 

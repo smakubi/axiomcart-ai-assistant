@@ -23,6 +23,7 @@
           <span>AxiomCart</span>
         </a>
         <div class="header-actions">
+          <a class="header-link" href="/architecture">Architecture</a>
           <span class="service-status" id="service-status">
             <span class="status-dot" aria-hidden="true"></span>
             <span>Connecting to Python</span>
@@ -46,8 +47,8 @@
       <section class="hero wrap">
         <h1>Multi-agent shopping<br />assistant.</h1>
         <p>
-          Product search, order support, human escalation, and graph execution
-          in one Python application.
+          Ask by voice. The graph routes product and order requests, runs the
+          relevant specialists, and returns a spoken answer.
         </p>
       </section>
 
@@ -56,8 +57,8 @@
           <div class="panel-heading conversation-heading">
             <div>
               <span class="section-kicker">Conversation</span>
-              <h2 id="conversation-heading">Customer session</h2>
-              <p>Ask about products, orders, or both.</p>
+              <h2 id="conversation-heading">Voice session</h2>
+              <p>Press the microphone, speak, then press again to send.</p>
             </div>
             <button class="icon-button" id="reset-button" type="button" aria-label="Start a new conversation" title="New conversation">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.34 5.66M20 4v7h-7" /></svg>
@@ -70,6 +71,22 @@
             <button type="button" data-prompt="Order ORD102 is late. Show me Sony alternatives too.">Run both agents</button>
           </div>
 
+          <div class="voice-console" id="voice-console" data-stage="idle">
+            <button class="voice-button" id="voice-button" type="button" aria-label="Start recording">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a4 4 0 0 0 4-4V6a4 4 0 1 0-8 0v5a4 4 0 0 0 4 4Z" /><path d="M5 10.5V11a7 7 0 0 0 14 0v-.5M12 18v3m-4 0h8" /></svg>
+              <span class="voice-bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+            </button>
+            <div class="voice-copy">
+              <span id="voice-stage-label">Ready</span>
+              <strong id="voice-status">Press the microphone to speak</strong>
+              <p id="voice-detail">Audio is transcribed, processed by the graph, and returned as speech.</p>
+            </div>
+            <button class="voice-reply-toggle" id="voice-reply-toggle" type="button" aria-pressed="true">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Zm4 4a4 4 0 0 1 0 6m2.5-8.5a7 7 0 0 1 0 11" /></svg>
+              <span>Voice replies on</span>
+            </button>
+          </div>
+
           <div class="transcript" id="transcript" aria-live="polite" aria-label="Conversation transcript"></div>
 
           <div class="composer-wrap">
@@ -77,21 +94,27 @@
               <span class="interrupt-icon" aria-hidden="true">↳</span>
               <span>The graph is paused. Your next message resumes the saved checkpoint.</span>
             </div>
-            <form class="composer" id="composer">
-              <label class="sr-only" for="message-input">Message AxiomCart</label>
-              <textarea
-                id="message-input"
-                rows="1"
-                maxlength="4000"
-                placeholder="Ask about a product or an order…"
-              ></textarea>
-              <div class="composer-footer">
-                <span class="composer-hint" id="composer-hint">Enter to send · Shift + Enter for a new line</span>
-                <button class="send-button" id="send-button" type="submit" aria-label="Send message">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 7-7 7 7M12 19V5" /></svg>
-                </button>
-              </div>
-            </form>
+            <button class="keyboard-toggle" id="keyboard-toggle" type="button" aria-expanded="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18v12H3V6Zm3 3h.01M9 9h.01M12 9h.01M15 9h.01M18 9h.01M6 12h.01M9 12h.01M12 12h.01M15 12h.01M18 12h.01M7 15h10" /></svg>
+              <span>Use keyboard</span>
+            </button>
+            <div id="text-entry" hidden>
+              <form class="composer" id="composer">
+                <label class="sr-only" for="message-input">Message AxiomCart</label>
+                <textarea
+                  id="message-input"
+                  rows="1"
+                  maxlength="4000"
+                  placeholder="Ask about a product or an order…"
+                ></textarea>
+                <div class="composer-footer">
+                  <span class="composer-hint" id="composer-hint">Enter to send · Shift + Enter for a new line</span>
+                  <button class="send-button" id="send-button" type="submit" aria-label="Send message">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 7-7 7 7M12 19V5" /></svg>
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </section>
 
@@ -113,7 +136,7 @@
 
           <div class="tab-panel" id="graph-panel" role="tabpanel">
             <div class="graph-board" aria-label="LangGraph execution diagram">
-              <article class="node-card node-orchestrator" data-node="orchestrator" data-status="ready">
+              <article class="node-card node-orchestrator" data-node="orchestrator" data-status="ready" role="button" tabindex="0" aria-label="View orchestrator source code">
                 <span class="node-icon"><svg viewBox="0 0 24 24"><path d="M12 3v5m0 8v5M5 12H2m20 0h-3M7.1 7.1 4.9 4.9m14.2 14.2-2.2-2.2M16.9 7.1l2.2-2.2M4.9 19.1l2.2-2.2" /><circle cx="12" cy="12" r="4" /></svg></span>
                 <div><span class="node-step">01 · Route</span><h3>Orchestrator</h3><code>structured output</code></div>
                 <span class="node-status">Ready</span>
@@ -122,12 +145,12 @@
               <div class="graph-branch" aria-hidden="true"><span></span><span></span><span></span></div>
 
               <div class="agent-grid">
-                <article class="node-card" data-node="product_agent" data-status="ready">
+                <article class="node-card" data-node="product_agent" data-status="ready" role="button" tabindex="0" aria-label="View product agent source code">
                   <span class="node-icon"><svg viewBox="0 0 24 24"><path d="M3 6h18l-2 12H5L3 6Zm4 0a5 5 0 0 1 10 0" /></svg></span>
                   <div><span class="node-step">02A · Discover</span><h3>Product agent</h3><code>create_agent + tools</code></div>
                   <span class="node-status">Ready</span>
                 </article>
-                <article class="node-card" data-node="support_agent" data-status="ready">
+                <article class="node-card" data-node="support_agent" data-status="ready" role="button" tabindex="0" aria-label="View support agent source code">
                   <span class="node-icon"><svg viewBox="0 0 24 24"><path d="M4 13a8 8 0 0 1 16 0v6a2 2 0 0 1-2 2h-3v-7h5M4 13v7H2a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h2m8 9h3" /></svg></span>
                   <div><span class="node-step">02B · Resolve</span><h3>Support agent</h3><code>interrupt + resume</code></div>
                   <span class="node-status">Ready</span>
@@ -136,7 +159,7 @@
 
               <div class="graph-merge" aria-hidden="true"><span></span><span></span><span></span></div>
 
-              <article class="node-card" data-node="synthesizer" data-status="ready">
+              <article class="node-card" data-node="synthesizer" data-status="ready" role="button" tabindex="0" aria-label="View synthesizer source code">
                 <span class="node-icon"><svg viewBox="0 0 24 24"><path d="M4 5h16M7 10h10M9 15h6M11 20h2" /></svg></span>
                 <div><span class="node-step">03 · Respond</span><h3>Synthesizer</h3><code>parallel fan-in</code></div>
                 <span class="node-status">Ready</span>
@@ -155,6 +178,9 @@
               <div><dt>route</dt><dd id="state-route">[]</dd></div>
               <div><dt>agent_results</dt><dd id="state-results">0 items</dd></div>
               <div><dt>checkpoint</dt><dd id="state-checkpoint">idle</dd></div>
+              <div><dt>provider</dt><dd id="state-provider">—</dd></div>
+              <div><dt>model</dt><dd id="state-model">—</dd></div>
+              <div><dt>elapsed</dt><dd id="state-elapsed">—</dd></div>
             </dl>
             <div class="state-note">
               <strong>Why this matters</strong>
@@ -177,12 +203,12 @@
           <p>The project focuses on the workflow features used in the application.</p>
         </div>
         <div class="concept-grid">
-          <article><span>01</span><h3>Typed routing</h3><p>Pydantic validates the orchestrator's decision before the graph acts on it.</p><code>with_structured_output()</code></article>
-          <article><span>02</span><h3>Parallel fan-out</h3><p><code>Send</code> starts product and support work in the same super-step.</p><code>Command(goto=[Send(...)])</code></article>
-          <article><span>03</span><h3>Agent abstraction</h3><p>Specialists use LangChain's maintained tool loop instead of custom plumbing.</p><code>create_agent()</code></article>
-          <article><span>04</span><h3>Human input</h3><p>The support node pauses and resumes from an exact checkpoint.</p><code>interrupt() · Command(resume)</code></article>
-          <article><span>05</span><h3>Live streaming</h3><p>Custom graph events drive this inspector as each node executes.</p><code>astream(version="v2")</code></article>
-          <article><span>06</span><h3>Deployable Python</h3><p>FastAPI serves the UI and graph from one Vercel project.</p><code>api/*.py</code></article>
+          <a href="/architecture#orchestrator"><article><span>01</span><h3>Typed routing</h3><p>Pydantic validates the orchestrator's decision before the graph acts on it.</p><code>with_structured_output()</code></article></a>
+          <a href="/architecture#orchestrator"><article><span>02</span><h3>Parallel fan-out</h3><p><code>Send</code> starts product and support work in the same super-step.</p><code>Command(goto=[Send(...)])</code></article></a>
+          <a href="/architecture#product_agent"><article><span>03</span><h3>Agent abstraction</h3><p>Specialists use LangChain's maintained tool loop instead of custom plumbing.</p><code>create_agent()</code></article></a>
+          <a href="/architecture#support_agent"><article><span>04</span><h3>Human input</h3><p>The support node pauses and resumes from an exact checkpoint.</p><code>interrupt() · Command(resume)</code></article></a>
+          <a href="/architecture#graph"><article><span>05</span><h3>Live streaming</h3><p>Custom graph events drive this inspector as each node executes.</p><code>astream(version="v2")</code></article></a>
+          <a href="/architecture#graph"><article><span>06</span><h3>Deployable Python</h3><p>FastAPI serves the UI and graph from one Vercel project.</p><code>api/*.py</code></article></a>
         </div>
       </section>
 
@@ -193,7 +219,7 @@
         </summary>
         <div class="run-guide-grid">
           <p><span>1</span><strong>Clone</strong> the repository and run <code>uv sync</code>.</p>
-          <p><span>2</span><strong>Add</strong> an OpenAI key in this page or in <code>.env</code>.</p>
+          <p><span>2</span><strong>Add</strong> Baseten for reasoning and OpenAI for speech in <code>.env</code>.</p>
           <p><span>3</span><strong>Start</strong> with <code>uv run uvicorn src.api:app --reload</code>.</p>
           <p><span>4</span><strong>Deploy</strong> the same repository directly to Vercel.</p>
         </div>
@@ -201,7 +227,7 @@
 
       <footer class="site-footer wrap">
         <span>AxiomCart</span>
-        <span>Python · LangChain · LangGraph · FastAPI</span>
+        <span><a href="/architecture">Architecture</a> · Python · LangChain · LangGraph · FastAPI</span>
       </footer>
     </main>
 
@@ -213,7 +239,7 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
           </button>
         </div>
-        <p class="settings-intro">Use the server key or add an OpenAI key for this browser session.</p>
+        <p class="settings-intro">The deployment uses Inkling on Baseten. Add an OpenAI key only to override reasoning or enable speech when the server has no speech key.</p>
 
         <label class="field">
           <span>OpenAI API key <small>session only</small></span>
@@ -225,9 +251,9 @@
         </label>
 
         <label class="field">
-          <span>Chat model</span>
+          <span>OpenAI fallback model</span>
           <input id="model-input" type="text" value="gpt-5.4-mini" />
-          <small>Use any OpenAI chat model available to your account.</small>
+          <small>This applies only when you provide a session key above.</small>
         </label>
 
         <div class="server-key-note" id="server-key-note">
@@ -240,6 +266,20 @@
           <button class="button button-primary" id="settings-save" value="default" type="submit">Save settings</button>
         </div>
       </form>
+    </dialog>
+
+    <dialog class="code-dialog" id="code-dialog">
+      <div class="code-dialog-card">
+        <div class="code-dialog-header">
+          <div><span class="section-kicker">Python source</span><h2 id="code-dialog-title">Component</h2><code id="code-dialog-path"></code></div>
+          <button class="icon-button" id="code-dialog-close" aria-label="Close source code" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
+          </button>
+        </div>
+        <p id="code-dialog-role"></p>
+        <pre><code id="code-dialog-source"></code></pre>
+        <div class="code-dialog-footer"><a class="button button-secondary" id="architecture-link" href="/architecture">Open architecture page</a></div>
+      </div>
     </dialog>
   </body>
 </html>

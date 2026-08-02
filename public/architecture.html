@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="A source-backed walkthrough of the AxiomCart voice and LangGraph architecture." />
+    <meta name="theme-color" content="#f6f8fc" />
+    <title>AxiomCart — System Architecture</title>
+    <link rel="icon" href="/assets/mark.svg" />
+    <link rel="stylesheet" href="/assets/styles.css" />
+    <script type="module" src="/assets/architecture.js"></script>
+  </head>
+  <body>
+    <main class="page-shell architecture-page">
+      <header class="site-header wrap">
+        <a class="brand" href="/" aria-label="AxiomCart home">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M6.6 7.2h12.8l-1.1 7.1a2 2 0 0 1-2 1.7H9a2 2 0 0 1-2-1.7L5.7 4.8H3.8M9.2 20h.1m6.6 0h.1" /></svg>
+          </span>
+          <span>AxiomCart</span>
+        </a>
+        <div class="header-actions">
+          <a class="header-link" href="/">Demo</a>
+          <a class="button button-secondary button-compact" href="https://github.com/smakubi/axiomcart-ai-assistant" target="_blank" rel="noreferrer">Repository</a>
+        </div>
+      </header>
+
+      <section class="architecture-hero wrap">
+        <span class="section-kicker">Reference</span>
+        <h1>System architecture</h1>
+        <p>Follow one spoken request from browser audio through transcription, graph execution, tools, checkpoints, synthesis, and speech output.</p>
+      </section>
+
+      <section class="architecture-section wrap" aria-labelledby="voice-path-heading">
+        <div class="architecture-section-heading">
+          <div><span class="section-kicker">Input and output</span><h2 id="voice-path-heading">Voice path</h2></div>
+          <p>Inkling handles graph reasoning through Baseten. OpenAI handles the two speech boundaries.</p>
+        </div>
+        <div class="voice-pipeline" id="voice-pipeline" aria-label="Voice processing pipeline"></div>
+      </section>
+
+      <section class="architecture-section wrap" aria-labelledby="graph-heading">
+        <div class="architecture-section-heading">
+          <div><span class="section-kicker">Orchestration</span><h2 id="graph-heading">Graph flow</h2></div>
+          <p>Select a component to inspect the Python used by the running application.</p>
+        </div>
+        <div class="architecture-graph" aria-label="AxiomCart graph flow">
+          <button data-component="orchestrator"><span>01</span><strong>Orchestrator</strong><code>RoutingDecision</code></button>
+          <div class="architecture-fork" aria-hidden="true"></div>
+          <div class="architecture-agents">
+            <button data-component="product_agent"><span>02A</span><strong>Product agent</strong><code>catalog tools</code></button>
+            <button data-component="support_agent"><span>02B</span><strong>Support agent</strong><code>orders + interrupt</code></button>
+          </div>
+          <div class="architecture-fork architecture-merge" aria-hidden="true"></div>
+          <button data-component="synthesizer"><span>03</span><strong>Synthesizer</strong><code>parallel fan-in</code></button>
+        </div>
+      </section>
+
+      <section class="source-explorer wrap" aria-labelledby="source-heading">
+        <div class="component-index">
+          <span class="section-kicker">Source map</span>
+          <h2 id="source-heading">Python components</h2>
+          <div id="component-list"></div>
+        </div>
+        <article class="source-panel">
+          <header>
+            <div><span id="source-concept">Loading</span><h3 id="source-title">Source code</h3><code id="source-path"></code></div>
+            <button class="button button-secondary button-compact" id="copy-source" type="button">Copy</button>
+          </header>
+          <p id="source-role">Loading the architecture manifest.</p>
+          <pre><code id="source-code"></code></pre>
+        </article>
+      </section>
+
+      <section class="walkthrough-section wrap" aria-labelledby="walkthrough-heading">
+        <div><span class="section-kicker">Classroom sequence</span><h2 id="walkthrough-heading">Suggested walkthrough</h2></div>
+        <ol>
+          <li><span>01</span><strong>Start with state.</strong><p>Show the contract shared by every node and the reducer used for parallel results.</p></li>
+          <li><span>02</span><strong>Trace routing.</strong><p>Run a mixed request and inspect the structured decision and two parallel sends.</p></li>
+          <li><span>03</span><strong>Pause the graph.</strong><p>Ask for order help without an identifier, then resume the saved checkpoint by voice.</p></li>
+          <li><span>04</span><strong>Read telemetry.</strong><p>Compare graph events, state, provider, model, and elapsed time in the live demo.</p></li>
+        </ol>
+      </section>
+
+      <footer class="site-footer wrap">
+        <span>AxiomCart</span>
+        <span><a href="/">Open demo</a> · Python · LangChain · LangGraph · FastAPI</span>
+      </footer>
+    </main>
+  </body>
+</html>

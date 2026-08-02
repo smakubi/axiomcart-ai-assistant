@@ -19,7 +19,7 @@ from langgraph.types import Command, Send, interrupt
 
 from src.config import AgentContext, chat_model
 from src.data import SUPPORT_POLICIES
-from src.state import AgentResult, AxiomCartState, RoutingDecision, WorkerState
+from src.state import AgentResult, AgentTask, AxiomCartState, RoutingDecision, WorkerState
 from src.tools import escalate_to_human, get_order_status, search_product_catalog
 
 PRODUCT_PROMPT = """You are AxiomCart's product discovery specialist.
@@ -27,7 +27,7 @@ PRODUCT_PROMPT = """You are AxiomCart's product discovery specialist.
 Use search_product_catalog for every product request. Only recommend products
 returned by the tool, format prices in USD with a $ symbol, and be honest when nothing fits.
 For greetings or thanks, answer warmly without using a tool. Keep answers clear,
-compact, and useful to a shopper.
+compact, and useful to a shopper. Return plain text without Markdown formatting.
 """
 
 SUPPORT_PROMPT = f"""You are AxiomCart's order support specialist.
@@ -35,6 +35,7 @@ SUPPORT_PROMPT = f"""You are AxiomCart's order support specialist.
 Use get_order_status before making claims about an order. Use
 escalate_to_human only when the customer asks for a person or the issue cannot
 be resolved. Be concise and empathetic.
+Return plain text without Markdown formatting.
 
 Policies:
 {SUPPORT_POLICIES}
@@ -67,6 +68,15 @@ def message_text(message: BaseMessage) -> str:
     ).strip()
 
 
+def plain_spoken_text(value: str) -> str:
+    """Remove formatting characters that should not reach speech synthesis."""
+    value = re.sub(r"\*\*(.*?)\*\*", r"\1", value)
+    value = re.sub(r"`([^`]+)`", r"\1", value)
+    value = re.sub(r"^#{1,6}\s+", "", value, flags=re.MULTILINE)
+    value = re.sub(r"^[*-]\s+", "", value, flags=re.MULTILINE)
+    return value.strip()
+
+
 def latest_user_text(messages: list[BaseMessage]) -> str:
     for message in reversed(messages):
         if isinstance(message, HumanMessage):
@@ -95,6 +105,55 @@ def tool_names(messages: list[BaseMessage]) -> list[str]:
     return names
 
 
+def fallback_routing_decision(query: str) -> RoutingDecision:
+    """Keep common shopping routes available when a provider returns invalid JSON."""
+    lowered = query.lower()
+    support_terms = {
+        "order",
+        "ord",
+        "delivery",
+        "delayed",
+        "late",
+        "tracking",
+        "shipped",
+        "refund",
+        "support",
+        "human",
+    }
+    product_terms = {
+        "product",
+        "recommend",
+        "show me",
+        "under $",
+        "alternative",
+        "headphone",
+        "earbud",
+        "shoe",
+        "phone",
+        "macbook",
+        "fan",
+        "sony",
+        "bose",
+        "nike",
+        "apple",
+        "samsung",
+    }
+    agents = []
+    if any(term in lowered for term in support_terms):
+        agents.append("support_agent")
+    if any(term in lowered for term in product_terms):
+        agents.append("product_agent")
+    if not agents:
+        agents.append("product_agent")
+    return RoutingDecision(
+        tasks=[
+            AgentTask(agent=agent, instruction=f"Handle this customer request: {query}")
+            for agent in agents
+        ],
+        reasoning="Deterministic fallback selected the relevant specialist responsibilities.",
+    )
+
+
 async def orchestrator(
     state: AxiomCartState,
     runtime: Runtime[AgentContext],
@@ -107,9 +166,17 @@ async def orchestrator(
         RoutingDecision,
         method="json_schema",
     )
-    decision = await router.ainvoke(
-        [SystemMessage(content=ORCHESTRATOR_PROMPT), HumanMessage(content=query)]
-    )
+    try:
+        decision = await router.ainvoke(
+            [SystemMessage(content=ORCHESTRATOR_PROMPT), HumanMessage(content=query)]
+        )
+    except Exception as error:
+        decision = fallback_routing_decision(query)
+        emit(
+            "orchestrator",
+            "active",
+            f"Provider output was invalid ({type(error).__name__}); using deterministic routing",
+        )
     route = [task.agent for task in decision.tasks]
     emit(
         "orchestrator",
@@ -160,7 +227,7 @@ async def product_agent(
         f"Recent conversation:\n{conversation_excerpt(state['messages'])}"
     )
     result = await agent.ainvoke({"messages": [HumanMessage(content=prompt)]})
-    answer = message_text(result["messages"][-1])
+    answer = plain_spoken_text(message_text(result["messages"][-1]))
     used_tools = tool_names(result["messages"])
     emit(
         "product_agent",
@@ -209,7 +276,7 @@ async def support_agent(
         f"Recent conversation:\n{context}"
     )
     result = await agent.ainvoke({"messages": [HumanMessage(content=prompt)]})
-    answer = message_text(result["messages"][-1])
+    answer = plain_spoken_text(message_text(result["messages"][-1]))
     used_tools = tool_names(result["messages"])
     emit(
         "support_agent",
@@ -242,12 +309,12 @@ async def synthesizer(
         prompt = (
             "Combine these specialist answers into one concise, natural reply. "
             "Preserve every important order fact and product price. Do not mention "
-            "agents, routing, tools, or synthesis.\n\n"
+            "agents, routing, tools, or synthesis. Return plain text without Markdown.\n\n"
             f"Customer request: {state['current_query']}\n\n"
             f"Specialist results:\n{json.dumps(results, indent=2, ensure_ascii=False)}"
         )
         response = await chat_model(runtime.context, temperature=0.2).ainvoke(prompt)
-        answer = message_text(response)
+        answer = plain_spoken_text(message_text(response))
 
     emit("synthesizer", "complete", "Final answer ready")
     return {"final_answer": answer, "messages": [AIMessage(content=answer)]}

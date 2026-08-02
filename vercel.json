@@ -1,8 +1,15 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "cleanUrls": true,
   "functions": {
     "api/chat/stream.py": {
       "maxDuration": 300
+    },
+    "api/voice/transcribe.py": {
+      "maxDuration": 60
+    },
+    "api/voice/speak.py": {
+      "maxDuration": 60
     }
   }
 }

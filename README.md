@@ -1,8 +1,9 @@
 # AxiomCart — Multi-Agent Shopping Assistant
 
-AxiomCart is a Python shopping assistant for teaching LangGraph orchestration.
-It includes product search, order support, parallel routing, checkpointed human
-input, a FastAPI API, and a browser interface that displays node activity.
+AxiomCart is a voice-first Python shopping assistant for teaching LangGraph
+orchestration. It includes speech input and output, product search, order
+support, parallel routing, checkpointed human input, live telemetry, and a
+source-backed architecture explorer.
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/smakubi/axiomcart-ai-assistant)
 
@@ -15,6 +16,12 @@ input, a FastAPI API, and a browser interface that displays node activity.
 - Removed import-time API-key exits and heavy vector-store initialization.
 - Added a FastAPI streaming API that accepts a deployment key or a learner's
   session-only key.
+- Uses the open-weight Inkling model through Baseten for graph reasoning and
+  OpenAI only at the speech boundaries.
+- Added microphone recording, transcription, and spoken responses. Keyboard
+  input remains available as a secondary control.
+- Added an architecture page and clickable graph nodes that display the exact
+  Python running in the application.
 - Added a responsive teaching UI inspired by the clean, two-pane Voice AI demo.
 - Made the UI and Python backend deploy together as one Vercel project.
 
@@ -57,22 +64,22 @@ uv sync
 uv run uvicorn src.api:app --reload
 ```
 
-Open [http://localhost:8000](http://localhost:8000). Add an OpenAI API key in
-**Settings**. The key is stored only in browser `sessionStorage` and sent to
-your own Python deployment for each run.
+Open [http://localhost:8000](http://localhost:8000), allow microphone access,
+and press the microphone button. Open [http://localhost:8000/architecture](http://localhost:8000/architecture)
+for the source-backed system walkthrough.
 
 You can instead configure a server key:
 
 ```bash
 cp .env.example .env
-# Add OPENAI_API_KEY to .env
+# Add BASETEN_API_KEY for Inkling and OPENAI_API_KEY for speech
 uv run uvicorn src.api:app --reload
 ```
 
 ### 3. Run the CLI (optional)
 
 ```bash
-export OPENAI_API_KEY=sk-...
+export BASETEN_API_KEY=...
 uv run python -m src.main
 ```
 
@@ -92,6 +99,7 @@ Sample order IDs are `ORD101` through `ORD104`.
 ```text
 api/*.py                 Thin Vercel route entrypoints
 public/                  Zero-build web interface
+public/architecture.html Source-backed architecture walkthrough
 src/api.py               FastAPI routes and NDJSON event stream
 src/config.py            Per-run model context; no import-time side effects
 src/data.py              Small catalog and order fixtures
@@ -108,9 +116,9 @@ docs/TEACHING_GUIDE.md   A ready-to-use lesson plan
 
 ### Context instead of globals
 
-`AgentContext` carries the API key and model name through the graph's
-`context_schema`. A learner key is scoped to one run and is never assigned to a
-module-level client.
+`AgentContext` carries provider, base URL, API key, and model through the graph's
+`context_schema`. Baseten is selected first when its key exists. A learner's
+OpenAI key is scoped to one run and is never assigned to a module-level client.
 
 ### Structured routing
 
@@ -140,6 +148,19 @@ graph checkpoint stores the paused execution. The next API request uses
 FastAPI consumes `graph.astream(..., version="v2")` and emits newline-delimited
 JSON. Custom events from nodes and tools power the live browser inspector.
 
+### Voice boundaries
+
+The browser records audio with `MediaRecorder`. FastAPI sends the recording to
+OpenAI transcription, runs the resulting text through the same LangGraph, and
+returns generated speech. If hosted speech playback fails, the browser speech
+API is used as a fallback.
+
+### Source-backed architecture
+
+`/api/architecture` uses Python inspection to return the current implementation
+of each graph component. Both the live graph cards and `/architecture` consume
+that endpoint, so the code shown during a lesson matches the deployed runtime.
+
 ## Deploy to Vercel
 
 Click **Deploy with Vercel** above or import the repository in Vercel. No custom
@@ -151,8 +172,10 @@ Optional environment variables:
 
 | Variable | Purpose |
 | --- | --- |
-| `OPENAI_API_KEY` | Shared deployment key; omit for learner-provided keys |
-| `OPENAI_MODEL` | CLI default model |
+| `BASETEN_API_KEY` | Default reasoning provider key |
+| `BASETEN_MODEL` | Baseten model; defaults to `thinkingmachines/inkling-small` |
+| `OPENAI_API_KEY` | Transcription, speech, and reasoning fallback |
+| `OPENAI_MODEL` | OpenAI fallback model |
 | `LOG_LEVEL` | Python logging level |
 
 The included `vercel.json` gives the graph function a 300-second maximum

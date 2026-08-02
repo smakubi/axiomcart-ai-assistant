@@ -11,18 +11,29 @@ from pathlib import Path
 from typing import Annotated, Literal
 from uuid import uuid4
 
-from fastapi import FastAPI, Header, HTTPException
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi import FastAPI, File, Header, HTTPException, UploadFile
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.types import Command
+from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 
-from src.config import DEFAULT_MODEL, AgentContext, server_api_key
+from src.architecture import architecture_manifest
+from src.config import (
+    DEFAULT_OPENAI_MODEL,
+    AgentContext,
+    ModelConfig,
+    server_model_config,
+    speech_api_key,
+)
 from src.graph import axiomcart_graph
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 PUBLIC_DIR = ROOT_DIR / "public"
+MAX_AUDIO_BYTES = 10 * 1024 * 1024
+TRANSCRIPTION_MODEL = "gpt-transcribe"
+SPEECH_MODEL = "gpt-4o-mini-tts"
 
 app = FastAPI(
     title="AxiomCart Teaching API",
@@ -45,12 +56,16 @@ class ChatRequest(BaseModel):
     message: str = Field(default="", max_length=4_000)
     resume: str | None = Field(default=None, max_length=1_000)
     thread_id: str = Field(default_factory=lambda: uuid4().hex, max_length=128)
-    model: str = Field(default=DEFAULT_MODEL, min_length=1, max_length=100)
+    model: str = Field(default=DEFAULT_OPENAI_MODEL, min_length=1, max_length=100)
     history: list[HistoryMessage] = Field(default_factory=list, max_length=30)
 
 
 class ResetRequest(BaseModel):
     thread_id: str = Field(min_length=1, max_length=128)
+
+
+class SpeechRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=4_000)
 
 
 def package_version(name: str) -> str:
@@ -101,17 +116,23 @@ async def has_checkpoint(thread_id: str) -> bool:
 
 async def graph_events(
     request: ChatRequest,
-    api_key: str,
+    model_config: ModelConfig,
 ) -> AsyncIterator[bytes]:
     run_id = uuid4().hex
     config = {"configurable": {"thread_id": request.thread_id}}
-    context = AgentContext(api_key=api_key, model_name=request.model)
+    context = AgentContext(
+        api_key=model_config.api_key,
+        model_name=model_config.model_name,
+        provider=model_config.provider,
+        base_url=model_config.base_url,
+    )
     yield encode_event(
         {
             "type": "run.started",
             "run_id": run_id,
             "thread_id": request.thread_id,
-            "model": request.model,
+            "model": model_config.model_name,
+            "provider": model_config.provider,
         }
     )
 
@@ -207,15 +228,25 @@ async def home() -> HTMLResponse:
     return HTMLResponse((PUBLIC_DIR / "index.html").read_text())
 
 
+@app.get("/architecture", response_class=HTMLResponse, include_in_schema=False)
+async def architecture_page() -> HTMLResponse:
+    return HTMLResponse((PUBLIC_DIR / "architecture.html").read_text())
+
+
 @app.get("/api/health")
 async def health() -> dict:
+    model_config = server_model_config()
     return {
         "status": "ready",
-        "server_key_configured": bool(server_api_key()),
+        "server_key_configured": bool(model_config),
+        "speech_configured": bool(speech_api_key()),
+        "provider": model_config.provider if model_config else None,
+        "model": model_config.model_name if model_config else None,
         "python": platform.python_version(),
         "langgraph": package_version("langgraph"),
         "langchain": package_version("langchain"),
-        "default_model": DEFAULT_MODEL,
+        "transcription_model": TRANSCRIPTION_MODEL,
+        "speech_model": SPEECH_MODEL,
     }
 
 
@@ -243,23 +274,84 @@ async def graph_metadata() -> dict:
     }
 
 
+@app.get("/api/architecture")
+async def architecture_metadata() -> dict:
+    return architecture_manifest()
+
+
 @app.post("/api/chat/stream")
 async def chat_stream(
     request: ChatRequest,
     learner_key: Annotated[str | None, Header(alias="X-OpenAI-API-Key")] = None,
 ) -> StreamingResponse:
-    api_key = (learner_key or server_api_key() or "").strip()
-    if not api_key:
+    if learner_key and learner_key.strip():
+        model_config = ModelConfig(
+            api_key=learner_key.strip(),
+            model_name=request.model,
+            provider="openai",
+        )
+    else:
+        model_config = server_model_config()
+    if not model_config:
         raise HTTPException(
             status_code=401,
-            detail="Add an OpenAI API key in Settings or configure OPENAI_API_KEY on the server.",
+            detail="Configure BASETEN_API_KEY or add an OpenAI API key in Settings.",
         )
     if request.resume is None and not request.message.strip():
         raise HTTPException(status_code=422, detail="message cannot be empty")
     return StreamingResponse(
-        graph_events(request, api_key),
+        graph_events(request, model_config),
         media_type="application/x-ndjson",
         headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    )
+
+
+def resolve_speech_key(learner_key: str | None) -> str:
+    api_key = (learner_key or speech_api_key() or "").strip()
+    if not api_key:
+        raise HTTPException(
+            status_code=401,
+            detail="Voice requires an OpenAI key in Settings or OPENAI_API_KEY on the server.",
+        )
+    return api_key
+
+
+@app.post("/api/voice/transcribe")
+async def transcribe_audio(
+    audio: Annotated[UploadFile, File()],
+    learner_key: Annotated[str | None, Header(alias="X-OpenAI-API-Key")] = None,
+) -> dict:
+    contents = await audio.read(MAX_AUDIO_BYTES + 1)
+    if not contents:
+        raise HTTPException(status_code=400, detail="Record some audio first.")
+    if len(contents) > MAX_AUDIO_BYTES:
+        raise HTTPException(status_code=413, detail="Keep recordings under 10 MB.")
+
+    client = AsyncOpenAI(api_key=resolve_speech_key(learner_key))
+    transcription = await client.audio.transcriptions.create(
+        model=TRANSCRIPTION_MODEL,
+        file=(audio.filename or "recording.webm", contents, audio.content_type or "audio/webm"),
+    )
+    return {"text": transcription.text.strip()}
+
+
+@app.post("/api/voice/speak")
+async def speak_text(
+    request: SpeechRequest,
+    learner_key: Annotated[str | None, Header(alias="X-OpenAI-API-Key")] = None,
+) -> Response:
+    client = AsyncOpenAI(api_key=resolve_speech_key(learner_key))
+    speech = await client.audio.speech.create(
+        model=SPEECH_MODEL,
+        voice="coral",
+        input=request.text,
+        instructions="Speak clearly and naturally at a concise conversational pace.",
+        response_format="mp3",
+    )
+    return Response(
+        content=speech.content,
+        media_type="audio/mpeg",
+        headers={"Cache-Control": "no-store"},
     )
 
 
