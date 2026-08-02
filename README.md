@@ -80,7 +80,7 @@ uv run python -m src.main
 
 | Prompt | Concept to point out |
 | --- | --- |
-| `Show me wireless headphones under ₹15,000` | One specialist and a catalog tool |
+| `Show me wireless headphones under $300` | One specialist and a catalog tool |
 | `Where is order ORD102?` | One specialist and an order lookup |
 | `Order ORD102 is late. Show me Sony alternatives too.` | Parallel `Send` fan-out and synthesis |
 | `I need help with an order` | `interrupt()` and `Command(resume=...)` |

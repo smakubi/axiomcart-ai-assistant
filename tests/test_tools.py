@@ -13,7 +13,7 @@ def test_lookup_order_accepts_email() -> None:
 
 
 def test_product_ranking_respects_brand_and_budget() -> None:
-    matches = rank_products("Sony headphones under ₹15,000")
+    matches = rank_products("Sony headphones under $500")
     assert matches
     assert matches[0]["brand"] == "Sony"
-    assert matches[0]["price"] <= 15_000
+    assert matches[0]["price"] <= 500

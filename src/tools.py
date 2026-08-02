@@ -53,7 +53,7 @@ def _searchable_text(product: dict) -> str:
 def rank_products(query: str, *, limit: int = 3) -> list[dict]:
     """Rank the catalog with readable lexical scoring and price filters."""
     query_tokens = _tokens(query)
-    budget_match = re.search(r"(?:under|below|less than)\s*[₹$]?\s*([\d,]+)", query.lower())
+    budget_match = re.search(r"(?:under|below|less than)\s*[$]?\s*([\d,]+)", query.lower())
     budget = int(budget_match.group(1).replace(",", "")) if budget_match else None
 
     ranked: list[tuple[float, dict]] = []

@@ -235,7 +235,7 @@ async def graph_metadata() -> dict:
             ["support_agent", "synthesizer"],
         ],
         "examples": [
-            "Show me wireless headphones under ₹15,000",
+            "Show me wireless headphones under $300",
             "Where is order ORD102?",
             "Order ORD102 is late. Show me Sony alternatives too.",
             "I need help with an order",

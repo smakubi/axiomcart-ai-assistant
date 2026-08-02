@@ -1,6 +1,5 @@
 const elements = {
   serviceStatus: document.querySelector("#service-status"),
-  versionChip: document.querySelector("#version-chip"),
   transcript: document.querySelector("#transcript"),
   promptStrip: document.querySelector("#prompt-strip"),
   composer: document.querySelector("#composer"),
@@ -341,7 +340,6 @@ async function loadHealth() {
     state.serverKeyConfigured = health.server_key_configured;
     elements.serviceStatus.dataset.status = "ready";
     elements.serviceStatus.lastElementChild.textContent = "API ready";
-    elements.versionChip.textContent = `Python ${health.python} · LangGraph ${health.langgraph}`;
     elements.serverKeyNote.dataset.status = health.server_key_configured ? "ready" : "local";
     elements.serverKeyNote.lastElementChild.textContent = health.server_key_configured
       ? "This deployment has a server API key configured."
