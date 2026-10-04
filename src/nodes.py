@@ -399,6 +399,7 @@ async def synthesizer(
     else:
         answer = "\n\n".join(result["answer"] for result in results)
 
+    get_stream_writer()({"kind": "answer", "answer": answer})
     emit(
         "synthesizer",
         "complete",

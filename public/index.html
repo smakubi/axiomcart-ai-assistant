@@ -11,7 +11,7 @@
     <title>AxiomCart — Multi-Agent Shopping Assistant</title>
     <link rel="icon" href="/assets/mark.svg" />
     <link rel="stylesheet" href="/assets/styles.css?v=20260802-8" />
-    <script type="module" src="/assets/app.js?v=20260802-8"></script>
+    <script type="module" src="/assets/app.js?v=20261004-1"></script>
   </head>
   <body>
     <main class="page-shell">
@@ -75,6 +75,7 @@
               <span id="voice-stage-label">Voice input</span>
               <strong id="voice-status">Start voice conversation</strong>
               <p id="voice-detail">Speak normally. It keeps listening until you end the conversation.</p>
+              <p id="live-transcript" aria-live="polite" aria-label="Live transcript preview"></p>
             </div>
             <button class="voice-reply-toggle" id="voice-reply-toggle" type="button" aria-pressed="true">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Zm4 4a4 4 0 0 1 0 6m2.5-8.5a7 7 0 0 1 0 11" /></svg>
@@ -83,14 +84,15 @@
           </div>
 
           <div class="latency-trace" aria-label="Latest voice turn timing">
-            <article data-latency-stage="input"><span>01</span><div><strong>Listen</strong><small>Turn detection</small></div><b id="latency-input">Ready</b></article>
+            <article data-latency-stage="input"><span>01</span><div><strong>Listen</strong><small>Silence → commit (live)</small></div><b id="latency-input">Ready</b></article>
             <i aria-hidden="true">→</i>
-            <article data-latency-stage="transcription"><span>02</span><div><strong>Transcribe</strong><small>Audio to text</small></div><b id="latency-transcription">Ready</b></article>
+            <article data-latency-stage="transcription"><span>02</span><div><strong>Transcribe</strong><small>Commit → final text (live)</small></div><b id="latency-transcription">Ready</b></article>
             <i aria-hidden="true">→</i>
             <article data-latency-stage="graph"><span>03</span><div><strong>Reason</strong><small>Graph execution</small></div><b id="latency-graph">Ready</b></article>
             <i aria-hidden="true">→</i>
             <article data-latency-stage="speech"><span>04</span><div><strong>Speak</strong><small>Text to audio</small></div><b id="latency-speech">Ready</b></article>
           </div>
+          <p class="composer-hint" id="response-latency">End of speech → first audio: —</p>
 
           <div class="prompt-strip" id="prompt-strip" aria-label="Example questions">
             <span>Or try an example</span>
@@ -266,6 +268,15 @@
           <span>OpenAI fallback model</span>
           <input id="model-input" type="text" value="gpt-5.4-mini" />
           <small>This applies only when you provide a session key above.</small>
+        </label>
+
+        <label class="field">
+          <span>Voice input</span>
+          <select id="voice-mode">
+            <option value="live">Streaming transcription (recommended)</option>
+            <option value="recorded">Recorded turn upload (teaching comparison)</option>
+          </select>
+          <small>Both modes use the same cascaded transcription → LangGraph → speech pipeline.</small>
         </label>
 
         <div class="server-key-note" id="server-key-note">

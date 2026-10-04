@@ -13,7 +13,7 @@ from typing import Annotated, Literal
 from uuid import uuid4
 
 from fastapi import FastAPI, File, Header, HTTPException, UploadFile
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.types import Command
@@ -29,6 +29,7 @@ from src.config import (
     speech_api_key,
 )
 from src.graph import axiomcart_graph
+from src.voice import LIVE_TRANSCRIPTION_MODEL, transcription_session_config
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 PUBLIC_DIR = ROOT_DIR / "public"
@@ -173,6 +174,15 @@ async def graph_events(
             part_type = part.get("type")
             data = part.get("data")
             if part_type == "custom" and isinstance(data, dict):
+                if data.get("kind") == "answer":
+                    yield encode_event(
+                        {
+                            "type": "answer.ready",
+                            "answer": data["answer"],
+                            "elapsed_ms": round((perf_counter() - started_at) * 1000),
+                        }
+                    )
+                    continue
                 yield encode_event(
                     {
                         "type": "graph.event",
@@ -261,6 +271,8 @@ async def health() -> dict:
         "langgraph": package_version("langgraph"),
         "langchain": package_version("langchain"),
         "transcription_model": TRANSCRIPTION_MODEL,
+        "live_transcription_model": LIVE_TRANSCRIPTION_MODEL,
+        "voice_architecture": "cascaded",
         "speech_model": SPEECH_MODEL,
         "speech_voice": SPEECH_VOICE,
     }
@@ -330,6 +342,30 @@ def resolve_speech_key(learner_key: str | None) -> str:
             detail="Voice requires an OpenAI key in Settings or OPENAI_API_KEY on the server.",
         )
     return api_key
+
+
+@app.post("/api/voice/session")
+async def transcription_session(
+    learner_key: Annotated[str | None, Header(alias="X-OpenAI-API-Key")] = None,
+) -> JSONResponse:
+    """Mint a short-lived transcription-only token; never return the server key."""
+    client = AsyncOpenAI(api_key=resolve_speech_key(learner_key), timeout=20, max_retries=0)
+    try:
+        secret = await client.realtime.client_secrets.create(
+            session=transcription_session_config(),
+            expires_after={"anchor": "created_at", "seconds": 60},
+        )
+        return JSONResponse(
+            {"value": secret.value, "expires_at": secret.expires_at},
+            headers={"Cache-Control": "no-store"},
+        )
+    except Exception as error:
+        raise HTTPException(
+            status_code=502,
+            detail="Live transcription could not connect. Try again or use the keyboard.",
+        ) from error
+    finally:
+        await client.close()
 
 
 @app.post("/api/voice/transcribe")

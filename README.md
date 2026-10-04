@@ -101,6 +101,9 @@ Sample order IDs are `ORD101` through `ORD104`.
 
 ```text
 api/*.py                 Thin Vercel route entrypoints
+    api/voice/session.py     Short-lived transcription-only credential endpoint
+    src/voice.py             Live STT configuration
+    public/assets/live-transcription.mjs  WebRTC, turn detection, transcript lifecycle
 public/                  Zero-build web interface
 public/architecture.html Source-backed architecture walkthrough
 src/api.py               FastAPI routes and NDJSON event stream
@@ -161,12 +164,13 @@ JSON. Custom events from nodes and tools power the live browser inspector.
 
 ### Voice boundaries
 
-The browser keeps one microphone stream open, records a turn with
-`MediaRecorder`, and sends it after a short silence. It automatically resumes
-listening after the spoken answer. FastAPI uses `gpt-4o-mini-transcribe` and
-runs the text through LangGraph. Natural `gpt-4o-mini-tts` PCM speech is streamed
-to the browser and begins playing while the remaining audio arrives. The live
-trace reports input, transcription, graph, and speech-start duration separately.
+This remains a **cascaded voice pipeline**: streaming STT → text-based LangGraph/Baseten → separate streaming TTS. WebRTC is the microphone transport, not a speech-to-speech reasoning model.
+
+The default input streams audio directly to a transcription-only `gpt-live-transcribe` session. `/api/voice/session` uses the existing server `OPENAI_API_KEY` to mint a 60-second connection credential; the server key stays on the server. Partial transcript deltas are captions only. A browser silence detector commits the turn after 500 ms, and only the matching finalized transcript enters the graph. The microphone is muted during reasoning and playback to avoid transcribing the assistant's voice.
+
+The synthesizer emits `answer.ready` so the browser can request `gpt-4o-mini-tts` before checkpoint bookkeeping finishes. PCM playback starts after a 120 ms buffer. This does not stream specialist model tokens into speech: the graph assembles a grounded final answer before TTS begins. Settings retains **Recorded turn upload** using `MediaRecorder` and `gpt-4o-mini-transcribe` for comparison or browsers/networks without WebRTC.
+
+The trace reports silence-to-commit, commit-to-final-transcript, graph execution, TTS-to-first-playback, and end-of-speech-to-first-audio. These client measurements include network waiting where relevant; graph duration is measured on the server. See [the cascaded voice lesson and examples](docs/CASCADED_VOICE.md).
 
 ### Source-backed architecture
 
@@ -215,6 +219,7 @@ embedding-database lesson.
 ```bash
 uv run ruff check .
 uv run pytest
+node --test tests/js/*.test.mjs
 uv run python -m compileall src api
 ```
 
