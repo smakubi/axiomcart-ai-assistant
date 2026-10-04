@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
-from src.api import app
+from src.speech_api import app
 
 client = TestClient(app)
 
@@ -28,7 +28,7 @@ def test_session_returns_only_short_lived_transcription_credential(monkeypatch):
             pass
 
     monkeypatch.setenv("OPENAI_API_KEY", "server-secret-never-returned")
-    monkeypatch.setattr("src.api.AsyncOpenAI", FakeClient)
+    monkeypatch.setattr("src.speech_api.AsyncOpenAI", FakeClient)
     response = client.post("/api/voice/session")
     assert response.status_code == 200
     assert response.json() == {"value": "ephemeral-test", "expires_at": 1234}
@@ -52,7 +52,7 @@ def test_provider_error_does_not_expose_credentials(monkeypatch):
             pass
 
     monkeypatch.setenv("OPENAI_API_KEY", "server-secret-never-returned")
-    monkeypatch.setattr("src.api.AsyncOpenAI", FakeClient)
+    monkeypatch.setattr("src.speech_api.AsyncOpenAI", FakeClient)
     response = client.post("/api/voice/session")
     assert response.status_code == 502
     assert "server-secret" not in response.text

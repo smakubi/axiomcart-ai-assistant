@@ -43,6 +43,27 @@ muted during reasoning/playback, so this demo has sequential conversational
 turns rather than barge-in. Ending/resetting closes the peer connection and
 microphone and discards pending events.
 
+## Recovery and latency safeguards
+
+The server defaults to `zai-org/GLM-4.7` on Baseten, with thinking explicitly
+disabled on the provider request. The former `thinkingmachines/inkling-small`
+deployment returned HTTP 410 because that model version was deprecated.
+Complete greetings and thanks skip both model calls. Intent matching uses word
+boundaries, so “affordable headphones” cannot accidentally invoke order support.
+The specialist prompts ask for short spoken replies and one clarification at a time.
+
+Model calls have a 15-second timeout and one retry. A graph turn has a 45-second
+budget; the browser has a 60-second request deadline and rejects a stream that
+ends without a terminal event. Speech generation has a 30-second browser
+deadline. These limits release the controls and microphone after failures instead
+of leaving the conversation frozen. Playback keeps the 120 ms PCM buffer but
+adds only 20 ms scheduling lead; listening resumes after an 80 ms guard.
+
+Voice Vercel entrypoints import `src/speech_api.py`, which loads neither LangGraph
+nor LangChain. The local FastAPI app includes the same voice router. This keeps
+speech/session cold starts independent of graph construction. OpenAI clients
+have bounded timeouts and are closed after each stream or transcription request.
+
 ## Example code: transcription-only session
 
 The source-backed **Cascaded voice** card on `/architecture` displays the actual
@@ -133,7 +154,7 @@ voice replies off, and a network disconnect.
 ## Deployment and provider boundaries
 
 Keep `OPENAI_API_KEY` on the existing deployment. `BASETEN_API_KEY` still selects
-Inkling reasoning; the new session endpoint uses the speech key independently.
+GLM-4.7 reasoning; the new session endpoint uses the speech key independently.
 A learner key in Settings continues to override reasoning and speech as before.
 The ephemeral credential expires for connection establishment after 60 seconds;
 it is held in memory, not localStorage. Session close releases browser resources.

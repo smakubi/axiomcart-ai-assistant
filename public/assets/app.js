@@ -327,20 +327,28 @@ function historyForApi() {
 }
 
 async function readStream(response) {
+  if (!response.body) throw new Error("The graph response stream is unavailable.");
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let terminal = false;
+  const dispatch = (line) => {
+    const event = JSON.parse(line);
+    terminal ||= ["run.completed", "run.interrupted", "run.error"].includes(event.type);
+    handleServerEvent(event);
+  };
   while (true) {
     const { value, done } = await reader.read();
     buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
     const lines = buffer.split("\n");
     buffer = lines.pop() || "";
     for (const line of lines) {
-      if (line.trim()) handleServerEvent(JSON.parse(line));
+      if (line.trim()) dispatch(line);
     }
     if (done) break;
   }
-  if (buffer.trim()) handleServerEvent(JSON.parse(buffer));
+  if (buffer.trim()) dispatch(buffer);
+  if (!terminal) throw new Error("The graph stream ended before the response finished. Please try again.");
 }
 
 function handleServerEvent(event) {
@@ -417,6 +425,11 @@ async function sendMessage(text, { voiceInput = false } = {}) {
 
   const controller = new AbortController();
   state.controller = controller;
+  let timedOut = false;
+  const deadline = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, 60_000);
   const requestBody = {
     message: wasResume ? "" : content,
     resume: wasResume ? content : null,
@@ -441,7 +454,10 @@ async function sendMessage(text, { voiceInput = false } = {}) {
     }
     await readStream(response);
   } catch (error) {
-    if (error.name !== "AbortError") showError(error.message || "The Python API is unavailable.");
+    if (timedOut) showError("The response timed out. Please try again.");
+    else if (!controller.signal.aborted) showError(error.message || "The Python API is unavailable.");
+  } finally {
+    clearTimeout(deadline);
   }
 }
 
@@ -572,7 +588,8 @@ function monitorSilence() {
 
 function beginListening() {
   const stream = state.mediaStream;
-  if (!state.voiceSessionActive || !stream?.active || state.running) return;
+  if (!state.voiceSessionActive || !stream?.active || state.running
+      || state.speechController || state.speechSources.size) return;
   if (state.liveTranscription) {
     state.liveTranscription.resume();
     return;
@@ -609,7 +626,10 @@ function resumeListening() {
     setVoiceStage("idle");
     return;
   }
-  setTimeout(beginListening, 180);
+  const generation = state.voiceGeneration;
+  setTimeout(() => {
+    if (generation === state.voiceGeneration) beginListening();
+  }, 80);
 }
 
 function endVoiceSession(detail = "Voice conversation ended. Press to start again.") {
@@ -825,7 +845,7 @@ async function playStreamingSpeech(response, startedAt, controller) {
       state.speechSources.delete(source);
       finish();
     };
-    const leadSeconds = playbackScheduled ? 0.04 : 0.12;
+    const leadSeconds = playbackScheduled ? 0.04 : 0.02;
     nextStartTime = Math.max(nextStartTime, context.currentTime + leadSeconds);
     source.start(nextStartTime);
     if (!playbackScheduled) {
@@ -865,6 +885,11 @@ async function playStreamingSpeech(response, startedAt, controller) {
 async function speakHostedText(text, startedAt) {
   const controller = new AbortController();
   state.speechController = controller;
+  let timedOut = false;
+  const deadline = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, 30_000);
   try {
     const response = await fetch("/api/voice/speak", {
       method: "POST",
@@ -875,11 +900,14 @@ async function speakHostedText(text, startedAt) {
     if (!response.ok) throw new Error("Natural speech service unavailable");
     await playStreamingSpeech(response, startedAt, controller);
   } catch (error) {
-    if (!controller.signal.aborted) {
-      setVoiceStage("error", error.message || "Natural voice playback is unavailable.");
+    if (timedOut || !controller.signal.aborted) {
+      stopPlayback();
+      setVoiceStage("error", timedOut ? "Speech generation timed out. Please try again."
+        : error.message || "Natural voice playback is unavailable.");
       resumeListening();
     }
   } finally {
+    clearTimeout(deadline);
     if (state.speechController === controller) state.speechController = null;
   }
 }

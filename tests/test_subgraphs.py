@@ -29,3 +29,15 @@ async def test_explicit_mixed_request_runs_without_a_model_call() -> None:
     assert result["route"] == ["support_agent", "product_agent"]
     assert "Order ORD102" in result["final_answer"]
     assert "$" in result["final_answer"]
+
+
+async def test_greeting_never_calls_a_model() -> None:
+    graph = build_graph()
+    result = await graph.ainvoke(
+        {"messages": [HumanMessage(content="Hello!")], "current_query": "Hello!"},
+        config={"configurable": {"thread_id": uuid4().hex}},
+        context=AgentContext(api_key="unused", model_name="must-not-be-called"),
+    )
+    assert result["route"] == ["product_agent"]
+    assert result["final_answer"].startswith("Hi!")
+    assert result["agent_results"][0]["tool_names"] == []

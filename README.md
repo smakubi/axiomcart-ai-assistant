@@ -19,7 +19,7 @@ source-backed architecture explorer.
 - Added a FastAPI streaming API that accepts a deployment key or a learner's
   session-only key.
 - Uses deterministic graph paths for explicit requests and the open-weight
-  Inkling model through Baseten only when a turn needs model reasoning.
+  GLM-4.7 model through Baseten only when a turn needs model reasoning.
 - Added a continuous microphone session, turn detection, transcription, and
   spoken responses. Keyboard input remains available as a secondary control.
 - Added an architecture page and clickable graph nodes that display the exact
@@ -75,7 +75,7 @@ You can instead configure a server key:
 
 ```bash
 cp .env.example .env
-# Add BASETEN_API_KEY for Inkling and OPENAI_API_KEY for speech
+# Add BASETEN_API_KEY for GLM-4.7 and OPENAI_API_KEY for speech
 uv run uvicorn src.api:app --reload
 ```
 
@@ -107,6 +107,7 @@ api/*.py                 Thin Vercel route entrypoints
 public/                  Zero-build web interface
 public/architecture.html Source-backed architecture walkthrough
 src/api.py               FastAPI routes and NDJSON event stream
+src/speech_api.py        Lightweight voice routes without graph initialization
 src/config.py            Per-run model context; no import-time side effects
 src/data.py              Small catalog and order fixtures
 src/graph.py             Graph construction and checkpoint injection
@@ -190,7 +191,7 @@ Optional environment variables:
 | Variable | Purpose |
 | --- | --- |
 | `BASETEN_API_KEY` | Default reasoning provider key |
-| `BASETEN_MODEL` | Baseten model; defaults to `thinkingmachines/inkling-small` |
+| `BASETEN_MODEL` | Baseten model; defaults to `zai-org/GLM-4.7` with thinking disabled |
 | `OPENAI_API_KEY` | Transcription, speech, and reasoning fallback |
 | `OPENAI_MODEL` | OpenAI fallback model |
 | `LOG_LEVEL` | Python logging level |

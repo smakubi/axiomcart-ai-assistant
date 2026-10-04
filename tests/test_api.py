@@ -39,7 +39,7 @@ def test_health_prefers_baseten(monkeypatch) -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["provider"] == "baseten"
-    assert payload["model"] == "thinkingmachines/inkling-small"
+    assert payload["model"] == "zai-org/GLM-4.7"
     assert payload["speech_configured"] is True
     assert payload["transcription_model"] == "gpt-4o-mini-transcribe"
     assert payload["speech_model"] == "gpt-4o-mini-tts"
@@ -81,8 +81,11 @@ def test_speech_endpoint_streams_natural_voice(monkeypatch) -> None:
                 },
             )()
 
+        async def close(self):
+            calls.append("closed")
+
     monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
-    monkeypatch.setattr("src.api.AsyncOpenAI", FakeAsyncOpenAI)
+    monkeypatch.setattr("src.speech_api.AsyncOpenAI", FakeAsyncOpenAI)
 
     response = client.post("/api/voice/speak", json={"text": "Welcome to AxiomCart."})
 
@@ -95,6 +98,7 @@ def test_speech_endpoint_streams_natural_voice(monkeypatch) -> None:
     assert calls[0]["stream_format"] == "audio"
     assert calls[0]["response_format"] == "pcm"
     assert "warm, natural" in calls[0]["instructions"]
+    assert calls[-1] == "closed"
 
 
 def test_chat_requires_a_key_when_server_is_unconfigured(monkeypatch) -> None:
@@ -123,3 +127,28 @@ def test_answer_ready_arrives_before_checkpoint_completion(monkeypatch):
     complete = next(event for event in events if event["type"] == "run.completed")
     assert ready["answer"] == complete["answer"]
     assert "ORD102" in ready["answer"]
+
+
+async def test_stalled_graph_returns_a_terminal_timeout_event(monkeypatch):
+    import asyncio
+    import json
+
+    from src.api import ChatRequest, graph_events
+    from src.config import ModelConfig
+
+    class StalledGraph:
+        async def astream(self, *args, **kwargs):
+            await asyncio.sleep(60)
+            yield {}
+
+    monkeypatch.setattr("src.api.axiomcart_graph", StalledGraph())
+    monkeypatch.setattr("src.api.GRAPH_TIMEOUT_SECONDS", 0.01, raising=False)
+    events = [
+        json.loads(event)
+        async for event in graph_events(
+            ChatRequest(message="hello"),
+            ModelConfig(api_key="unused", model_name="unused", provider="baseten"),
+        )
+    ]
+    assert events[-1]["type"] == "run.error"
+    assert "timed out" in events[-1]["message"]

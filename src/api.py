@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import platform
@@ -12,12 +13,11 @@ from time import perf_counter
 from typing import Annotated, Literal
 from uuid import uuid4
 
-from fastapi import FastAPI, File, Header, HTTPException, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi import FastAPI, Header, HTTPException
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.types import Command
-from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 
 from src.architecture import architecture_manifest
@@ -29,16 +29,13 @@ from src.config import (
     speech_api_key,
 )
 from src.graph import axiomcart_graph
-from src.voice import LIVE_TRANSCRIPTION_MODEL, transcription_session_config
+from src.speech_api import SPEECH_MODEL, SPEECH_VOICE, TRANSCRIPTION_MODEL
+from src.speech_api import router as speech_router
+from src.voice import LIVE_TRANSCRIPTION_MODEL
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 PUBLIC_DIR = ROOT_DIR / "public"
-MAX_AUDIO_BYTES = 10 * 1024 * 1024
-TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe"
-SPEECH_MODEL = "gpt-4o-mini-tts"
-SPEECH_VOICE = "marin"
-SPEECH_CHUNK_BYTES = 4_096
-SPEECH_SAMPLE_RATE = 24_000
+GRAPH_TIMEOUT_SECONDS = 45
 
 app = FastAPI(
     title="AxiomCart Teaching API",
@@ -47,6 +44,8 @@ app = FastAPI(
     docs_url="/api/docs",
     redoc_url=None,
 )
+
+app.include_router(speech_router)
 
 if not os.getenv("VERCEL") and PUBLIC_DIR.exists():
     app.mount("/assets", StaticFiles(directory=PUBLIC_DIR / "assets"), name="assets")
@@ -67,10 +66,6 @@ class ChatRequest(BaseModel):
 
 class ResetRequest(BaseModel):
     thread_id: str = Field(min_length=1, max_length=128)
-
-
-class SpeechRequest(BaseModel):
-    text: str = Field(min_length=1, max_length=4_000)
 
 
 def package_version(name: str) -> str:
@@ -163,86 +158,91 @@ async def graph_events(
     pending_interrupt: dict | None = None
 
     try:
-        async for part in axiomcart_graph.astream(
-            graph_input,
-            config=config,
-            context=context,
-            stream_mode=["updates", "custom"],
-            subgraphs=True,
-            version="v2",
-        ):
-            part_type = part.get("type")
-            data = part.get("data")
-            if part_type == "custom" and isinstance(data, dict):
-                if data.get("kind") == "answer":
+        async with asyncio.timeout(GRAPH_TIMEOUT_SECONDS):
+            async for part in axiomcart_graph.astream(
+                graph_input,
+                config=config,
+                context=context,
+                stream_mode=["updates", "custom"],
+                subgraphs=True,
+                version="v2",
+            ):
+                part_type = part.get("type")
+                data = part.get("data")
+                if part_type == "custom" and isinstance(data, dict):
+                    if data.get("kind") == "answer":
+                        yield encode_event(
+                            {
+                                "type": "answer.ready",
+                                "answer": data["answer"],
+                                "elapsed_ms": round((perf_counter() - started_at) * 1000),
+                            }
+                        )
+                        continue
                     yield encode_event(
                         {
-                            "type": "answer.ready",
-                            "answer": data["answer"],
+                            "type": "graph.event",
                             "elapsed_ms": round((perf_counter() - started_at) * 1000),
+                            **data,
                         }
                     )
                     continue
+                if part_type != "updates" or not isinstance(data, dict):
+                    continue
+
+                found_interrupt = find_interrupt(data)
+                if found_interrupt:
+                    pending_interrupt = found_interrupt
+
+                for node_update in data.values():
+                    if not isinstance(node_update, dict):
+                        continue
+                    final_answer = node_update.get("final_answer", final_answer)
+                    route = node_update.get("route", route)
+                    routing_reason = node_update.get("routing_reason", routing_reason)
+                    if node_update.get("agent_results"):
+                        results.extend(node_update["agent_results"])
+
+            if pending_interrupt:
                 yield encode_event(
                     {
-                        "type": "graph.event",
+                        "type": "run.interrupted",
+                        "run_id": run_id,
+                        "thread_id": request.thread_id,
                         "elapsed_ms": round((perf_counter() - started_at) * 1000),
-                        **data,
+                        **pending_interrupt,
                     }
                 )
-                continue
-            if part_type != "updates" or not isinstance(data, dict):
-                continue
+                return
 
-            found_interrupt = find_interrupt(data)
-            if found_interrupt:
-                pending_interrupt = found_interrupt
-
-            for node_update in data.values():
-                if not isinstance(node_update, dict):
-                    continue
-                final_answer = node_update.get("final_answer", final_answer)
-                route = node_update.get("route", route)
-                routing_reason = node_update.get("routing_reason", routing_reason)
-                if node_update.get("agent_results"):
-                    results.extend(node_update["agent_results"])
-
-        if pending_interrupt:
+            snapshot = await axiomcart_graph.aget_state(config)
+            values = snapshot.values
+            final_answer = values.get("final_answer", final_answer)
+            route = values.get("route", route)
+            routing_reason = values.get("routing_reason", routing_reason)
+            results = values.get("agent_results", results)
             yield encode_event(
                 {
-                    "type": "run.interrupted",
+                    "type": "run.completed",
                     "run_id": run_id,
                     "thread_id": request.thread_id,
+                    "answer": final_answer,
+                    "route": route,
+                    "routing_reason": routing_reason,
+                    "agent_results": results,
                     "elapsed_ms": round((perf_counter() - started_at) * 1000),
-                    **pending_interrupt,
                 }
             )
-            return
-
-        snapshot = await axiomcart_graph.aget_state(config)
-        values = snapshot.values
-        final_answer = values.get("final_answer", final_answer)
-        route = values.get("route", route)
-        routing_reason = values.get("routing_reason", routing_reason)
-        results = values.get("agent_results", results)
-        yield encode_event(
-            {
-                "type": "run.completed",
-                "run_id": run_id,
-                "thread_id": request.thread_id,
-                "answer": final_answer,
-                "route": route,
-                "routing_reason": routing_reason,
-                "agent_results": results,
-                "elapsed_ms": round((perf_counter() - started_at) * 1000),
-            }
-        )
     except Exception as error:
         yield encode_event(
             {
                 "type": "run.error",
                 "run_id": run_id,
-                "message": str(error),
+                "message": (
+                    "The graph response timed out. Please try again."
+                    if isinstance(error, TimeoutError)
+                    else str(error)
+                ),
                 "elapsed_ms": round((perf_counter() - started_at) * 1000),
             }
         )
@@ -331,101 +331,6 @@ async def chat_stream(
         graph_events(request, model_config),
         media_type="application/x-ndjson",
         headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
-    )
-
-
-def resolve_speech_key(learner_key: str | None) -> str:
-    api_key = (learner_key or speech_api_key() or "").strip()
-    if not api_key:
-        raise HTTPException(
-            status_code=401,
-            detail="Voice requires an OpenAI key in Settings or OPENAI_API_KEY on the server.",
-        )
-    return api_key
-
-
-@app.post("/api/voice/session")
-async def transcription_session(
-    learner_key: Annotated[str | None, Header(alias="X-OpenAI-API-Key")] = None,
-) -> JSONResponse:
-    """Mint a short-lived transcription-only token; never return the server key."""
-    client = AsyncOpenAI(api_key=resolve_speech_key(learner_key), timeout=20, max_retries=0)
-    try:
-        secret = await client.realtime.client_secrets.create(
-            session=transcription_session_config(),
-            expires_after={"anchor": "created_at", "seconds": 60},
-        )
-        return JSONResponse(
-            {"value": secret.value, "expires_at": secret.expires_at},
-            headers={"Cache-Control": "no-store"},
-        )
-    except Exception as error:
-        raise HTTPException(
-            status_code=502,
-            detail="Live transcription could not connect. Try again or use the keyboard.",
-        ) from error
-    finally:
-        await client.close()
-
-
-@app.post("/api/voice/transcribe")
-async def transcribe_audio(
-    audio: Annotated[UploadFile, File()],
-    learner_key: Annotated[str | None, Header(alias="X-OpenAI-API-Key")] = None,
-) -> dict:
-    started_at = perf_counter()
-    contents = await audio.read(MAX_AUDIO_BYTES + 1)
-    if not contents:
-        raise HTTPException(status_code=400, detail="Record some audio first.")
-    if len(contents) > MAX_AUDIO_BYTES:
-        raise HTTPException(status_code=413, detail="Keep recordings under 10 MB.")
-
-    client = AsyncOpenAI(api_key=resolve_speech_key(learner_key))
-    transcription = await client.audio.transcriptions.create(
-        model=TRANSCRIPTION_MODEL,
-        file=(audio.filename or "recording.webm", contents, audio.content_type or "audio/webm"),
-        language="en",
-    )
-    return {
-        "text": transcription.text.strip(),
-        "latency_ms": round((perf_counter() - started_at) * 1000),
-    }
-
-
-async def speech_audio(text: str, api_key: str) -> AsyncIterator[bytes]:
-    """Stream natural speech bytes as OpenAI produces them."""
-    client = AsyncOpenAI(api_key=api_key)
-    async with client.audio.speech.with_streaming_response.create(
-        model=SPEECH_MODEL,
-        voice=SPEECH_VOICE,
-        input=text,
-        instructions=(
-            "Speak with a warm, natural, confident retail-assistant voice. "
-            "Use conversational pacing and avoid an announcer-like delivery."
-        ),
-        response_format="pcm",
-        stream_format="audio",
-    ) as response:
-        async for chunk in response.iter_bytes(chunk_size=SPEECH_CHUNK_BYTES):
-            yield chunk
-
-
-@app.post("/api/voice/speak")
-async def speak_text(
-    request: SpeechRequest,
-    learner_key: Annotated[str | None, Header(alias="X-OpenAI-API-Key")] = None,
-) -> StreamingResponse:
-    api_key = resolve_speech_key(learner_key)
-    return StreamingResponse(
-        speech_audio(request.text, api_key),
-        media_type="audio/pcm",
-        headers={
-            "Cache-Control": "no-store",
-            "X-Speech-Model": SPEECH_MODEL,
-            "X-Speech-Voice": SPEECH_VOICE,
-            "X-Audio-Sample-Rate": str(SPEECH_SAMPLE_RATE),
-            "X-Accel-Buffering": "no",
-        },
     )
 
 

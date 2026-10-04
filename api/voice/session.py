@@ -1,5 +1,5 @@
 """Vercel entrypoint for transcription-only session credentials."""
 
-from src.api import app
+from src.speech_api import app
 
 __all__ = ["app"]
