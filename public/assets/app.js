@@ -1,4 +1,5 @@
 import { highlightPython } from "./python-highlight.js?v=20260802-8";
+import { LiveTranscription } from "./live-transcription.mjs?v=20261004-1";
 
 const elements = {
   serviceStatus: document.querySelector("#service-status"),
@@ -25,6 +26,9 @@ const elements = {
   voiceStageLabel: document.querySelector("#voice-stage-label"),
   voiceStatus: document.querySelector("#voice-status"),
   voiceDetail: document.querySelector("#voice-detail"),
+  liveTranscript: document.querySelector("#live-transcript"),
+  voiceMode: document.querySelector("#voice-mode"),
+  responseLatency: document.querySelector("#response-latency"),
   voiceReplyToggle: document.querySelector("#voice-reply-toggle"),
   keyboardToggle: document.querySelector("#keyboard-toggle"),
   textEntry: document.querySelector("#text-entry"),
@@ -84,6 +88,8 @@ const state = {
   silenceFrame: null,
   speechDetected: false,
   silenceStartedAt: null,
+  lastSpeechAt: null,
+  transcriptionController: null,
   speechController: null,
   speechAudioContext: null,
   speechSources: new Set(),
@@ -93,6 +99,11 @@ const state = {
   model: "—",
   architecture: null,
   timings: {},
+  liveTranscription: null,
+  voiceConnecting: false,
+  voiceGeneration: 0,
+  voiceTurnEndedAt: null,
+  speechStartedForRun: false,
 };
 
 const voiceStages = {
@@ -143,6 +154,7 @@ function setTiming(stage, milliseconds) {
 
 function resetTimings() {
   state.timings = {};
+  elements.responseLatency.textContent = "End of speech → first audio: —";
   Object.entries(elements.latency).forEach(([stage, element]) => {
     element.textContent = "Ready";
     element.closest("article").dataset.status = "ready";
@@ -159,7 +171,7 @@ function setVoiceStage(stage, detail) {
   elements.voiceConsole.dataset.session = state.voiceSessionActive ? "active" : "inactive";
   elements.voiceButton.setAttribute(
     "aria-label",
-    state.voiceSessionActive ? "End voice conversation" : "Start voice conversation",
+    state.voiceSessionActive || state.voiceConnecting ? "End voice conversation" : "Start voice conversation",
   );
   document.querySelectorAll("[data-latency-stage]").forEach((card) => {
     if (card.dataset.status !== "complete") card.dataset.status = "ready";
@@ -251,6 +263,9 @@ function updateStatePanel(checkpoint) {
 }
 
 function configureRunStart() {
+  stopPlayback();
+  state.liveTranscription?.pause({ discard: true });
+  state.speechStartedForRun = false;
   state.running = true;
   state.events = [];
   state.route = [];
@@ -329,6 +344,13 @@ async function readStream(response) {
 }
 
 function handleServerEvent(event) {
+  if (event.type === "answer.ready") {
+    if (state.voiceReplies && !state.speechStartedForRun) {
+      state.speechStartedForRun = true;
+      speakText(event.answer);
+    }
+    return;
+  }
   if (event.type === "run.started") {
     state.provider = event.provider || "—";
     state.model = event.model || "—";
@@ -351,6 +373,7 @@ function handleServerEvent(event) {
     setTiming("graph", event.elapsed_ms || performance.now() - state.runStartedAt);
     configureRunEnd("waiting");
     if (state.voiceReplies) speakText(question);
+    else resumeListening();
     return;
   }
   if (event.type === "run.completed") {
@@ -373,8 +396,8 @@ function handleServerEvent(event) {
       elapsed_ms: event.elapsed_ms,
     });
     configureRunEnd("complete");
-    if (state.voiceReplies) speakText(answer);
-    else resumeListening();
+    if (state.voiceReplies && !state.speechStartedForRun) speakText(answer);
+    else if (!state.speechController && !state.speechSources.size) resumeListening();
     return;
   }
   if (event.type === "run.error") showError(event.message || "Unknown graph error");
@@ -384,6 +407,7 @@ async function sendMessage(text, { voiceInput = false } = {}) {
   if (!text.trim() || state.running) return;
   if (state.mediaRecorder?.state === "recording") finishVoiceTurn(false);
   const content = text.trim();
+  if (!voiceInput) state.voiceTurnEndedAt = null;
   const wasResume = state.pendingResume;
   state.messages.push({ role: "user", content });
   elements.input.value = "";
@@ -428,7 +452,7 @@ function resizeInput() {
 
 async function resetConversation() {
   state.controller?.abort();
-  if (state.voiceSessionActive) endVoiceSession();
+  if (state.voiceSessionActive || state.voiceConnecting) endVoiceSession();
   const previousThread = state.threadId;
   state.threadId = crypto.randomUUID();
   state.messages = [];
@@ -465,6 +489,7 @@ function switchTab(button) {
 function openSettings() {
   elements.apiKeyInput.value = getApiKey();
   elements.modelInput.value = getModel();
+  elements.voiceMode.value = localStorage.getItem("axiomcart-voice-mode") || "live";
   elements.settingsDialog.showModal();
 }
 
@@ -490,6 +515,13 @@ function clearTurnMonitoring() {
 }
 
 function releaseMicrophone() {
+  state.voiceGeneration += 1;
+  state.voiceConnecting = false;
+  state.liveTranscription?.close();
+  state.liveTranscription = null;
+  state.transcriptionController?.abort();
+  state.transcriptionController = null;
+  elements.liveTranscript.textContent = "";
   clearTurnMonitoring();
   state.audioSource?.disconnect();
   state.audioContext?.close().catch(() => {});
@@ -504,6 +536,7 @@ function finishVoiceTurn(shouldProcess = true) {
   if (state.mediaRecorder?.state !== "recording") return;
   if (shouldProcess && state.recordingStartedAt) {
     setTiming("input", performance.now() - state.recordingStartedAt);
+    state.voiceTurnEndedAt = state.lastSpeechAt;
   }
   state.recordingStartedAt = null;
   state.shouldProcessRecording = shouldProcess;
@@ -520,6 +553,7 @@ function monitorSilence() {
   );
   const now = performance.now();
   if (volume > 0.025) {
+    state.lastSpeechAt = now;
     if (!state.speechDetected) {
       resetTimings();
       state.recordingStartedAt = now;
@@ -539,6 +573,10 @@ function monitorSilence() {
 function beginListening() {
   const stream = state.mediaStream;
   if (!state.voiceSessionActive || !stream?.active || state.running) return;
+  if (state.liveTranscription) {
+    state.liveTranscription.resume();
+    return;
+  }
   state.recordingChunks = [];
   state.shouldProcessRecording = false;
   state.recordingStartedAt = null;
@@ -566,6 +604,7 @@ function beginListening() {
 }
 
 function resumeListening() {
+  if (state.running) return;
   if (!state.voiceSessionActive) {
     setVoiceStage("idle");
     return;
@@ -575,6 +614,11 @@ function resumeListening() {
 
 function endVoiceSession(detail = "Voice conversation ended. Press to start again.") {
   state.voiceSessionActive = false;
+  if (state.running) {
+    state.controller?.abort();
+    configureRunEnd();
+    setRunBadge("Stopped");
+  }
   if (state.mediaRecorder?.state === "recording") finishVoiceTurn(false);
   stopPlayback();
   releaseMicrophone();
@@ -600,6 +644,9 @@ function voiceHeaders() {
 async function transcribeRecording(blob) {
   setVoiceStage("transcribing");
   const startedAt = performance.now();
+  const generation = state.voiceGeneration;
+  const controller = new AbortController();
+  state.transcriptionController = controller;
   const formData = new FormData();
   const extension = blob.type.includes("mp4") ? "m4a" : "webm";
   formData.append("audio", blob, `recording.${extension}`);
@@ -608,35 +655,87 @@ async function transcribeRecording(blob) {
       method: "POST",
       headers: voiceHeaders(),
       body: formData,
+      signal: controller.signal,
     });
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}));
       throw new Error(payload.detail || `Transcription failed (${response.status})`);
     }
-    const { text, latency_ms: serverLatency } = await response.json();
-    setTiming("transcription", serverLatency || performance.now() - startedAt);
+    const { text } = await response.json();
+    if (generation !== state.voiceGeneration || !state.voiceSessionActive) return;
+    setTiming("transcription", performance.now() - startedAt);
     if (!text?.trim()) {
       resumeListening();
       return;
     }
     await sendMessage(text, { voiceInput: true });
   } catch (error) {
+    if (controller.signal.aborted || generation !== state.voiceGeneration) return;
     state.voiceSessionActive = false;
     releaseMicrophone();
     setVoiceStage("error", error.message || "The recording could not be transcribed.");
+  } finally {
+    if (state.transcriptionController === controller) state.transcriptionController = null;
   }
 }
 
 async function startVoiceSession() {
+  if (state.voiceConnecting) return;
   if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
     setVoiceStage("error", "This browser does not support microphone recording.");
     return;
   }
   stopPlayback();
+  const liveMode = (localStorage.getItem("axiomcart-voice-mode") || "live") === "live";
+  if (liveMode && !window.RTCPeerConnection) {
+    setVoiceStage("error", "Streaming input needs WebRTC. Choose recorded turn upload in Settings.");
+    return;
+  }
+  elements.latency.input.closest("article").querySelector("small").textContent = liveMode ? "Silence → commit" : "Recorded turn duration";
+  elements.latency.transcription.closest("article").querySelector("small").textContent = liveMode ? "Commit → final text" : "Upload → final text";
+  state.voiceConnecting = true;
+  setVoiceStage("transcribing", "Waiting for microphone access…");
+  const generation = ++state.voiceGeneration;
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+    if (generation !== state.voiceGeneration) {
+      stream.getTracks().forEach(track => track.stop());
+      return;
+    }
     state.mediaStream = stream;
     state.voiceSessionActive = true;
+    if (liveMode) {
+      setVoiceStage("transcribing", "Connecting live transcription…");
+      const live = new LiveTranscription({
+        headers: voiceHeaders,
+        onPreview: text => { elements.liveTranscript.textContent = text; },
+        onListening: () => setVoiceStage("listening", "Speak naturally. A half-second pause sends your turn."),
+        onCommit: (silenceMs, endedAt) => {
+          resetTimings();
+          state.voiceTurnEndedAt = endedAt;
+          setTiming("input", silenceMs);
+          setVoiceStage("transcribing", "Finalizing your streamed transcript…");
+        },
+        onTranscript: (text, latencyMs) => {
+          if (generation !== state.voiceGeneration || !state.voiceSessionActive) return;
+          setTiming("transcription", latencyMs);
+          if (text) sendMessage(text, { voiceInput: true });
+          else resumeListening();
+        },
+        onError: message => {
+          if (generation !== state.voiceGeneration) return;
+          endVoiceSession();
+          setVoiceStage("error", message);
+        },
+      });
+      state.liveTranscription = live;
+      await live.connect(stream);
+      if (generation === state.voiceGeneration && !state.running
+          && !state.speechController && !state.speechSources.size) beginListening();
+      return;
+    }
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     if (AudioContext) {
       state.audioContext = new AudioContext();
@@ -647,8 +746,12 @@ async function startVoiceSession() {
     }
     beginListening();
   } catch (error) {
+    if (generation !== state.voiceGeneration) return;
     state.voiceSessionActive = false;
-    setVoiceStage("error", error.name === "NotAllowedError" ? "Microphone permission was denied." : "The microphone could not be started.");
+    releaseMicrophone();
+    setVoiceStage("error", error.name === "NotAllowedError" ? "Microphone permission was denied." : error.message || "The microphone could not be started.");
+  } finally {
+    if (generation === state.voiceGeneration) state.voiceConnecting = false;
   }
 }
 
@@ -690,7 +793,8 @@ async function playStreamingSpeech(response, startedAt, controller) {
   if (context.state === "suspended") await context.resume();
 
   const reader = response.body.getReader();
-  const initialBufferBytes = sampleRate;
+  // 120 ms of mono PCM16, rather than the previous 500 ms buffer.
+  const initialBufferBytes = Math.ceil(sampleRate * 2 * 0.12);
   let nextStartTime = context.currentTime;
   let pendingBytes = new Uint8Array();
   let trailingByte = null;
@@ -699,7 +803,7 @@ async function playStreamingSpeech(response, startedAt, controller) {
   let finished = false;
 
   const finish = () => {
-    if (finished || !streamComplete || state.speechSources.size) return;
+    if (controller.signal.aborted || finished || !streamComplete || state.speechSources.size) return;
     finished = true;
     if (state.speechAudioContext === context) state.speechAudioContext = null;
     context.close().catch(() => {});
@@ -730,6 +834,11 @@ async function playStreamingSpeech(response, startedAt, controller) {
         "speech",
         performance.now() - startedAt + (nextStartTime - context.currentTime) * 1000,
       );
+      if (state.voiceTurnEndedAt !== null) {
+        const gap = performance.now() - state.voiceTurnEndedAt
+          + (nextStartTime - context.currentTime) * 1000;
+        elements.responseLatency.textContent = `End of speech → first audio: ${formatDuration(gap)}`;
+      }
     }
     nextStartTime += buffer.duration;
   };
@@ -812,6 +921,9 @@ function saveSettings(event) {
   if (apiKey) sessionStorage.setItem("axiomcart-openai-key", apiKey);
   else sessionStorage.removeItem("axiomcart-openai-key");
   localStorage.setItem("axiomcart-model", model);
+  const voiceMode = elements.voiceMode.value;
+  if (voiceMode !== (localStorage.getItem("axiomcart-voice-mode") || "live") && state.voiceSessionActive) endVoiceSession();
+  localStorage.setItem("axiomcart-voice-mode", voiceMode);
 }
 
 async function loadHealth() {
@@ -853,7 +965,7 @@ elements.promptStrip.addEventListener("click", (event) => {
 });
 elements.resetButton.addEventListener("click", resetConversation);
 elements.voiceButton.addEventListener("click", () => {
-  if (state.voiceSessionActive) endVoiceSession();
+  if (state.voiceSessionActive || state.voiceConnecting) endVoiceSession();
   else if (!state.running) startVoiceSession();
 });
 elements.voiceReplyToggle.addEventListener("click", () => {

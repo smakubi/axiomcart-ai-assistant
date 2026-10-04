@@ -14,7 +14,8 @@ By the end, learners should be able to explain:
 5. How a compiled subgraph becomes a node in a parent workflow.
 6. What a checkpointer stores and why `interrupt()` depends on it.
 7. How streamed graph events become a responsive product interface.
-8. Where voice transcription and speech synthesis sit outside the graph.
+8. Why streaming STT → LangGraph → streaming TTS remains a cascaded pipeline,
+   even when its microphone transport is WebRTC.
 9. How runtime code can be presented directly inside a teaching interface.
 
 ## Before class
@@ -58,7 +59,8 @@ Run the mixed prompt and point to `agent_results` in the State tab.
 
 Select the live **Orchestrator** graph card to open its deployed Python source.
 
-1. The model returns `RoutingDecision`, not prose that must be parsed.
+1. Explicit shopping/order intent uses deterministic routing. Ambiguous intent
+   calls a model returning `RoutingDecision`, not prose that must be parsed.
 2. Each `AgentTask` becomes a `Send` payload.
 3. One task routes to one branch; two tasks run in the same super-step.
 4. `Command` combines state updates and control flow in one return value.
@@ -102,13 +104,20 @@ Explain three rules:
 Open the **Events** and **State** tabs. Point out provider, model, elapsed time,
 node status, and tool events while a spoken request runs.
 
-The backend streams two categories:
+The backend streams three categories:
 
 - version 2 LangGraph `updates`
 - explicit `custom` node/tool events
+- `answer.ready`, which starts separate TTS before checkpoint bookkeeping completes
 
 The UI maps these events to visible status changes. It does not need to know how
 the model made its private token-level decision.
+
+Compare **Streaming transcription** and **Recorded turn upload** in Settings.
+Read [CASCADED_VOICE.md](CASCADED_VOICE.md) for the exact wire protocol, timing
+definitions, example code, and a repeatable comparison exercise. Open the
+**Cascaded voice** source card on `/architecture` to inspect the live session
+configuration. Partial captions must never trigger tools.
 
 ### 65–75 min — Deploy and extend
 
@@ -130,17 +139,26 @@ Use the Vercel button in the README. Ask learners to choose one extension:
 
 ## Common misconceptions
 
-**“Multi-agent” means every node needs a different model.**  
+**“Multi-agent” means every node needs a different model.**
 No. The separation is about responsibilities, prompts, tools, and state—not
 necessarily providers.
 
-**Streaming means exposing chain-of-thought.**  
+**Streaming means exposing chain-of-thought.**
 No. Stream status, tool activity, validated state updates, and final output.
 
-**A checkpointer is long-term memory.**  
+**A checkpointer is long-term memory.**
 Not exactly. It stores thread checkpoints. Cross-thread user memory belongs in a
 LangGraph Store or application database.
 
-**A Vercel deployment makes in-memory state durable.**  
+**A Vercel deployment makes in-memory state durable.**
 No. Warm instances can reuse it, but a cold start needs an external checkpointer
 for reliable resume behavior.
+
+**WebRTC means native speech-to-speech.**
+No. WebRTC is the audio transport. This app creates a transcription-only
+session, sends its finalized text to LangGraph, and synthesizes the graph's
+answer with a separate TTS request.
+
+**Streaming the graph inspector means the answer is token-streamed.**
+No. Status events and the assembled answer are separate. The current graph
+waits for its specialist results before emitting `answer.ready`.

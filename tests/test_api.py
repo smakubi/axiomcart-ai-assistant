@@ -105,3 +105,21 @@ def test_chat_requires_a_key_when_server_is_unconfigured(monkeypatch) -> None:
         json={"message": "hello", "thread_id": "test-thread"},
     )
     assert response.status_code == 401
+
+
+def test_answer_ready_arrives_before_checkpoint_completion(monkeypatch):
+    import json
+
+    monkeypatch.setenv("BASETEN_API_KEY", "test-baseten-key")
+    response = client.post(
+        "/api/chat/stream",
+        json={"message": "Where is order ORD102?", "thread_id": "early-answer-test"},
+    )
+    events = [json.loads(line) for line in response.text.splitlines()]
+    types = [event["type"] for event in events]
+    assert "answer.ready" in types
+    assert types.index("answer.ready") < types.index("run.completed")
+    ready = next(event for event in events if event["type"] == "answer.ready")
+    complete = next(event for event in events if event["type"] == "run.completed")
+    assert ready["answer"] == complete["answer"]
+    assert "ORD102" in ready["answer"]

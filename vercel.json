@@ -2,6 +2,9 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "cleanUrls": true,
   "functions": {
+    "api/voice/session.py": {
+      "maxDuration": 30
+    },
     "api/chat/stream.py": {
       "maxDuration": 300
     },

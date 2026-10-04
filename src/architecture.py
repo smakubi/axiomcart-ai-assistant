@@ -17,6 +17,7 @@ from src.nodes import (
 from src.state import AxiomCartState, RoutingDecision
 from src.subgraphs import build_specialist_subgraph
 from src.tools import escalate_to_human, get_order_status, search_product_catalog
+from src.voice import transcription_session_config
 
 
 def _component(
@@ -45,14 +46,18 @@ def architecture_manifest() -> dict:
             {
                 "id": "audio-input",
                 "title": "Audio input",
-                "detail": "The browser keeps one microphone session open and detects each turn.",
-                "technology": "MediaRecorder",
+                "detail": (
+                    "WebRTC streams microphone audio; local silence detection commits each turn."
+                ),
+                "technology": "WebRTC + 500 ms local turn detection",
             },
             {
                 "id": "transcription",
                 "title": "Transcription",
-                "detail": "OpenAI converts the recording to text for the graph.",
-                "technology": "gpt-4o-mini-transcribe",
+                "detail": (
+                    "Live captions arrive while speaking. Only finalized text enters the graph."
+                ),
+                "technology": "gpt-live-transcribe (transcription only)",
             },
             {
                 "id": "reasoning",
@@ -63,7 +68,9 @@ def architecture_manifest() -> dict:
             {
                 "id": "speech-output",
                 "title": "Speech output",
-                "detail": "Natural PCM speech begins playing while the remaining bytes arrive.",
+                "detail": (
+                    "An answer-ready event starts separate TTS; PCM plays after a 120 ms buffer."
+                ),
                 "technology": "streamed gpt-4o-mini-tts",
             },
         ],
@@ -76,6 +83,15 @@ def architecture_manifest() -> dict:
             ["synthesizer", "END"],
         ],
         "components": [
+            _component(
+                "voice",
+                "Cascaded voice",
+                "Creates a transcription-only session. LangGraph owns reasoning and separate "
+                "TTS speaks the final answer. Browser code: public/assets/live-transcription.mjs.",
+                "Streaming STT → LangGraph → streaming TTS",
+                "src/voice.py",
+                transcription_session_config,
+            ),
             _component(
                 "graph",
                 "Graph builder",
