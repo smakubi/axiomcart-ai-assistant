@@ -1,5 +1,5 @@
 """Vercel route entrypoint for speech generation."""
 
-from src.api import app
+from src.speech_api import app
 
 __all__ = ["app"]

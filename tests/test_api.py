@@ -81,8 +81,11 @@ def test_speech_endpoint_streams_natural_voice(monkeypatch) -> None:
                 },
             )()
 
+        async def close(self):
+            calls.append("closed")
+
     monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
-    monkeypatch.setattr("src.api.AsyncOpenAI", FakeAsyncOpenAI)
+    monkeypatch.setattr("src.speech_api.AsyncOpenAI", FakeAsyncOpenAI)
 
     response = client.post("/api/voice/speak", json={"text": "Welcome to AxiomCart."})
 
@@ -95,6 +98,7 @@ def test_speech_endpoint_streams_natural_voice(monkeypatch) -> None:
     assert calls[0]["stream_format"] == "audio"
     assert calls[0]["response_format"] == "pcm"
     assert "warm, natural" in calls[0]["instructions"]
+    assert calls[-1] == "closed"
 
 
 def test_chat_requires_a_key_when_server_is_unconfigured(monkeypatch) -> None:

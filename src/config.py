@@ -9,8 +9,10 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-from langchain_openai import ChatOpenAI
+if TYPE_CHECKING:
+    from langchain_openai import ChatOpenAI
 
 BASETEN_BASE_URL = "https://inference.baseten.co/v1"
 DEFAULT_BASETEN_MODEL = "zai-org/GLM-4.7"
@@ -84,6 +86,8 @@ def speech_api_key() -> str | None:
 
 def chat_model(context: AgentContext, *, temperature: float = 0) -> ChatOpenAI:
     """Create an OpenAI-compatible chat model for the selected provider."""
+    from langchain_openai import ChatOpenAI
+
     provider_options: dict = {}
     if context.provider == "baseten":
         provider_options["max_tokens"] = 1_500

@@ -59,6 +59,11 @@ deadline. These limits release the controls and microphone after failures instea
 of leaving the conversation frozen. Playback keeps the 120 ms PCM buffer but
 adds only 20 ms scheduling lead; listening resumes after an 80 ms guard.
 
+Voice Vercel entrypoints import `src/speech_api.py`, which loads neither LangGraph
+nor LangChain. The local FastAPI app includes the same voice router. This keeps
+speech/session cold starts independent of graph construction. OpenAI clients
+have bounded timeouts and are closed after each stream or transcription request.
+
 ## Example code: transcription-only session
 
 The source-backed **Cascaded voice** card on `/architecture` displays the actual
@@ -149,7 +154,7 @@ voice replies off, and a network disconnect.
 ## Deployment and provider boundaries
 
 Keep `OPENAI_API_KEY` on the existing deployment. `BASETEN_API_KEY` still selects
-Inkling reasoning; the new session endpoint uses the speech key independently.
+GLM-4.7 reasoning; the new session endpoint uses the speech key independently.
 A learner key in Settings continues to override reasoning and speech as before.
 The ephemeral credential expires for connection establishment after 60 seconds;
 it is held in memory, not localStorage. Session close releases browser resources.

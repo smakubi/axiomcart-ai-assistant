@@ -62,8 +62,8 @@ def architecture_manifest() -> dict:
             {
                 "id": "reasoning",
                 "title": "Graph execution",
-                "detail": "Explicit requests take a deterministic path; Inkling handles ambiguity.",
-                "technology": "LangGraph + optional Inkling",
+                "detail": "Explicit requests take a deterministic path; GLM-4.7 handles ambiguity.",
+                "technology": "LangGraph + optional GLM-4.7",
             },
             {
                 "id": "speech-output",
