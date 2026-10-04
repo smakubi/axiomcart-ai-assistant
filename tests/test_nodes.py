@@ -45,3 +45,18 @@ def test_order_results_are_ready_to_speak() -> None:
 
 def test_plain_spoken_text_removes_markdown_markers() -> None:
     assert plain_spoken_text("**Delayed**\n- Arrives Friday") == "Delayed\nArrives Friday"
+
+
+def test_affordable_products_do_not_trigger_order_support() -> None:
+    decision = deterministic_routing_decision("Recommend affordable headphones")
+    assert [task.agent for task in decision.tasks] == ["product_agent"]
+
+
+def test_greetings_route_without_a_model() -> None:
+    decision = deterministic_routing_decision("Hello!")
+    assert [task.agent for task in decision.tasks] == ["product_agent"]
+
+
+def test_order_identifier_routes_even_without_the_word_order() -> None:
+    decision = deterministic_routing_decision("Where is ORD102?")
+    assert [task.agent for task in decision.tasks] == ["support_agent"]

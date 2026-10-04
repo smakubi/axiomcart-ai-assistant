@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from langchain_openai import ChatOpenAI
 
 BASETEN_BASE_URL = "https://inference.baseten.co/v1"
-DEFAULT_BASETEN_MODEL = "thinkingmachines/inkling-small"
+DEFAULT_BASETEN_MODEL = "zai-org/GLM-4.7"
 DEFAULT_OPENAI_MODEL = "gpt-5.4-mini"
 DEFAULT_MODEL = DEFAULT_BASETEN_MODEL
 
@@ -84,18 +84,18 @@ def speech_api_key() -> str | None:
 
 def chat_model(context: AgentContext, *, temperature: float = 0) -> ChatOpenAI:
     """Create an OpenAI-compatible chat model for the selected provider."""
-    provider_options = (
-        {"reasoning_effort": "minimal", "max_completion_tokens": 1_500}
-        if context.provider == "baseten"
-        else {}
-    )
+    provider_options: dict = {}
+    if context.provider == "baseten":
+        provider_options["max_tokens"] = 1_500
+        if context.model_name.startswith("zai-org/GLM-"):
+            provider_options["extra_body"] = {"chat_template_args": {"enable_thinking": False}}
     return ChatOpenAI(
         api_key=context.api_key,
         model=context.model_name,
         base_url=context.base_url,
         temperature=temperature,
-        timeout=60,
-        max_retries=2,
+        timeout=15,
+        max_retries=1,
         **provider_options,
     )
 

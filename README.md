@@ -190,7 +190,7 @@ Optional environment variables:
 | Variable | Purpose |
 | --- | --- |
 | `BASETEN_API_KEY` | Default reasoning provider key |
-| `BASETEN_MODEL` | Baseten model; defaults to `thinkingmachines/inkling-small` |
+| `BASETEN_MODEL` | Baseten model; defaults to `zai-org/GLM-4.7` with thinking disabled |
 | `OPENAI_API_KEY` | Transcription, speech, and reasoning fallback |
 | `OPENAI_MODEL` | OpenAI fallback model |
 | `LOG_LEVEL` | Python logging level |

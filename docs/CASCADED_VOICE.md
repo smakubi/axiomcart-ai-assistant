@@ -43,6 +43,22 @@ muted during reasoning/playback, so this demo has sequential conversational
 turns rather than barge-in. Ending/resetting closes the peer connection and
 microphone and discards pending events.
 
+## Recovery and latency safeguards
+
+The server defaults to `zai-org/GLM-4.7` on Baseten, with thinking explicitly
+disabled on the provider request. The former `thinkingmachines/inkling-small`
+deployment returned HTTP 410 because that model version was deprecated.
+Complete greetings and thanks skip both model calls. Intent matching uses word
+boundaries, so “affordable headphones” cannot accidentally invoke order support.
+The specialist prompts ask for short spoken replies and one clarification at a time.
+
+Model calls have a 15-second timeout and one retry. A graph turn has a 45-second
+budget; the browser has a 60-second request deadline and rejects a stream that
+ends without a terminal event. Speech generation has a 30-second browser
+deadline. These limits release the controls and microphone after failures instead
+of leaving the conversation frozen. Playback keeps the 120 ms PCM buffer but
+adds only 20 ms scheduling lead; listening resumes after an 80 ms guard.
+
 ## Example code: transcription-only session
 
 The source-backed **Cascaded voice** card on `/architecture` displays the actual

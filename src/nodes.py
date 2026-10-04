@@ -28,6 +28,9 @@ Use search_product_catalog for every product request. Only recommend products
 returned by the tool, format prices in USD with a $ symbol, and be honest when nothing fits.
 For greetings or thanks, answer warmly without using a tool. Keep answers clear,
 compact, and useful to a shopper. Return plain text without Markdown formatting.
+This is a spoken conversation: use at most three short sentences unless the
+customer explicitly asks for detail. If clarification is needed, ask one focused
+question instead of listing every possible preference.
 """
 
 SUPPORT_PROMPT = f"""You are AxiomCart's order support specialist.
@@ -36,6 +39,8 @@ Use get_order_status before making claims about an order. Use
 escalate_to_human only when the customer asks for a person or the issue cannot
 be resolved. Be concise and empathetic.
 Return plain text without Markdown formatting.
+This is a spoken conversation: use at most three short sentences unless the
+customer explicitly asks for detail. Ask only one clarifying question at a time.
 
 Policies:
 {SUPPORT_POLICIES}
@@ -60,12 +65,14 @@ SUPPORT_TERMS = {
     "tracking",
     "shipped",
     "refund",
+    "return",
     "support",
     "human",
 }
 PRODUCT_TERMS = {
     "product",
     "recommend",
+    "compare",
     "show me",
     "under $",
     "alternative",
@@ -82,6 +89,21 @@ PRODUCT_TERMS = {
     "samsung",
 }
 COMPLEX_SUPPORT_TERMS = {"refund", "return", "human", "person", "agent", "escalate"}
+
+
+def smalltalk_answer(query: str) -> str | None:
+    """Handle only complete greetings/thanks, never a substantive request."""
+    normalized = query.strip().lower().strip(".!?, ")
+    if normalized in {"hi", "hello", "hey", "good morning", "good afternoon", "good evening"}:
+        return "Hi! I can help you find a product or check an order. What would you like?"
+    if normalized in {"thanks", "thank you", "thanks a lot"}:
+        return "You're welcome! Is there anything else I can help you with?"
+    return None
+
+
+def contains_intent(query: str, terms: set[str]) -> bool:
+    """Match complete words so 'affordable' cannot accidentally match 'ord'."""
+    return any(re.search(rf"\b{re.escape(term)}s?\b", query, re.I) for term in terms)
 
 
 def emit(node: str, status: str, detail: str, **extra: object) -> None:
@@ -153,9 +175,9 @@ def deterministic_routing_decision(query: str) -> RoutingDecision | None:
     """Route explicit commerce intent without spending a model round trip."""
     lowered = query.lower()
     agents = []
-    if any(term in lowered for term in SUPPORT_TERMS):
+    if contains_intent(lowered, SUPPORT_TERMS) or re.search(r"\bORD[- ]?\d+\b", query, re.I):
         agents.append("support_agent")
-    if any(term in lowered for term in PRODUCT_TERMS):
+    if contains_intent(lowered, PRODUCT_TERMS) or smalltalk_answer(query):
         agents.append("product_agent")
     if not agents:
         return None
@@ -270,7 +292,12 @@ async def product_agent(
     started_at = perf_counter()
     emit("product_agent", "active", "Searching products and drafting guidance")
     direct_matches = rank_products(state["current_query"])
-    if direct_matches:
+    greeting = smalltalk_answer(state["current_query"])
+    if greeting:
+        answer = greeting
+        used_tools = []
+        execution_mode = "deterministic"
+    elif direct_matches:
         payload = await search_product_catalog.ainvoke({"query": state["current_query"]})
         answer = format_product_results(payload)
         used_tools = ["search_product_catalog"]

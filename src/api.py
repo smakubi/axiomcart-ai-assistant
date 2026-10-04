@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import platform
@@ -39,6 +40,7 @@ SPEECH_MODEL = "gpt-4o-mini-tts"
 SPEECH_VOICE = "marin"
 SPEECH_CHUNK_BYTES = 4_096
 SPEECH_SAMPLE_RATE = 24_000
+GRAPH_TIMEOUT_SECONDS = 45
 
 app = FastAPI(
     title="AxiomCart Teaching API",
@@ -163,86 +165,91 @@ async def graph_events(
     pending_interrupt: dict | None = None
 
     try:
-        async for part in axiomcart_graph.astream(
-            graph_input,
-            config=config,
-            context=context,
-            stream_mode=["updates", "custom"],
-            subgraphs=True,
-            version="v2",
-        ):
-            part_type = part.get("type")
-            data = part.get("data")
-            if part_type == "custom" and isinstance(data, dict):
-                if data.get("kind") == "answer":
+        async with asyncio.timeout(GRAPH_TIMEOUT_SECONDS):
+            async for part in axiomcart_graph.astream(
+                graph_input,
+                config=config,
+                context=context,
+                stream_mode=["updates", "custom"],
+                subgraphs=True,
+                version="v2",
+            ):
+                part_type = part.get("type")
+                data = part.get("data")
+                if part_type == "custom" and isinstance(data, dict):
+                    if data.get("kind") == "answer":
+                        yield encode_event(
+                            {
+                                "type": "answer.ready",
+                                "answer": data["answer"],
+                                "elapsed_ms": round((perf_counter() - started_at) * 1000),
+                            }
+                        )
+                        continue
                     yield encode_event(
                         {
-                            "type": "answer.ready",
-                            "answer": data["answer"],
+                            "type": "graph.event",
                             "elapsed_ms": round((perf_counter() - started_at) * 1000),
+                            **data,
                         }
                     )
                     continue
+                if part_type != "updates" or not isinstance(data, dict):
+                    continue
+
+                found_interrupt = find_interrupt(data)
+                if found_interrupt:
+                    pending_interrupt = found_interrupt
+
+                for node_update in data.values():
+                    if not isinstance(node_update, dict):
+                        continue
+                    final_answer = node_update.get("final_answer", final_answer)
+                    route = node_update.get("route", route)
+                    routing_reason = node_update.get("routing_reason", routing_reason)
+                    if node_update.get("agent_results"):
+                        results.extend(node_update["agent_results"])
+
+            if pending_interrupt:
                 yield encode_event(
                     {
-                        "type": "graph.event",
+                        "type": "run.interrupted",
+                        "run_id": run_id,
+                        "thread_id": request.thread_id,
                         "elapsed_ms": round((perf_counter() - started_at) * 1000),
-                        **data,
+                        **pending_interrupt,
                     }
                 )
-                continue
-            if part_type != "updates" or not isinstance(data, dict):
-                continue
+                return
 
-            found_interrupt = find_interrupt(data)
-            if found_interrupt:
-                pending_interrupt = found_interrupt
-
-            for node_update in data.values():
-                if not isinstance(node_update, dict):
-                    continue
-                final_answer = node_update.get("final_answer", final_answer)
-                route = node_update.get("route", route)
-                routing_reason = node_update.get("routing_reason", routing_reason)
-                if node_update.get("agent_results"):
-                    results.extend(node_update["agent_results"])
-
-        if pending_interrupt:
+            snapshot = await axiomcart_graph.aget_state(config)
+            values = snapshot.values
+            final_answer = values.get("final_answer", final_answer)
+            route = values.get("route", route)
+            routing_reason = values.get("routing_reason", routing_reason)
+            results = values.get("agent_results", results)
             yield encode_event(
                 {
-                    "type": "run.interrupted",
+                    "type": "run.completed",
                     "run_id": run_id,
                     "thread_id": request.thread_id,
+                    "answer": final_answer,
+                    "route": route,
+                    "routing_reason": routing_reason,
+                    "agent_results": results,
                     "elapsed_ms": round((perf_counter() - started_at) * 1000),
-                    **pending_interrupt,
                 }
             )
-            return
-
-        snapshot = await axiomcart_graph.aget_state(config)
-        values = snapshot.values
-        final_answer = values.get("final_answer", final_answer)
-        route = values.get("route", route)
-        routing_reason = values.get("routing_reason", routing_reason)
-        results = values.get("agent_results", results)
-        yield encode_event(
-            {
-                "type": "run.completed",
-                "run_id": run_id,
-                "thread_id": request.thread_id,
-                "answer": final_answer,
-                "route": route,
-                "routing_reason": routing_reason,
-                "agent_results": results,
-                "elapsed_ms": round((perf_counter() - started_at) * 1000),
-            }
-        )
     except Exception as error:
         yield encode_event(
             {
                 "type": "run.error",
                 "run_id": run_id,
-                "message": str(error),
+                "message": (
+                    "The graph response timed out. Please try again."
+                    if isinstance(error, TimeoutError)
+                    else str(error)
+                ),
                 "elapsed_ms": round((perf_counter() - started_at) * 1000),
             }
         )
