@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from langchain_openai import ChatOpenAI
 
 BASETEN_BASE_URL = "https://inference.baseten.co/v1"
-DEFAULT_BASETEN_MODEL = "zai-org/GLM-4.7"
+DEFAULT_BASETEN_MODEL = "zai-org/GLM-5.3-Flash"
 DEFAULT_OPENAI_MODEL = "gpt-5.4-mini"
 DEFAULT_MODEL = DEFAULT_BASETEN_MODEL
 
@@ -92,7 +92,7 @@ def chat_model(context: AgentContext, *, temperature: float = 0) -> ChatOpenAI:
     if context.provider == "baseten":
         provider_options["max_tokens"] = 1_500
         if context.model_name.startswith("zai-org/GLM-"):
-            provider_options["extra_body"] = {"chat_template_args": {"enable_thinking": False}}
+            provider_options["reasoning_effort"] = "low"
     return ChatOpenAI(
         api_key=context.api_key,
         model=context.model_name,
