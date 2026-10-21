@@ -1,0 +1,5 @@
+openai>=1.75,<3
+sounddevice>=0.5,<1
+numpy>=1.26,<3
+python-dotenv>=1,<2
+pytest>=8,<10
