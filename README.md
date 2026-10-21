@@ -7,6 +7,14 @@ source-backed architecture explorer.
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/smakubi/axiomcart-ai-assistant)
 
+## Wednesday coaching — Voice Cascade Workshop
+
+**Start here:** [Step-by-step workshop guide](workshop/START-HERE.md) · [Instructor curriculum](workshop/README.md) · [Local Python implementation](workshop/local/README.md).
+
+This workshop builds microphone → STT → simple LLM → TTS in Python, then explores silence detection, latency, production challenges, and how LiveKit/Pipecat help. It runs locally with a microphone, speakers, internet, and an API key. It is independent of the full LangGraph application. Advanced streaming and barge-in are discussed, not yet implemented in the local CLI.
+
+---
+
 ## What changed from the original
 
 - Replaced hand-written model/tool loops with LangChain's maintained
