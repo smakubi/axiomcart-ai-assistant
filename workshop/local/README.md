@@ -51,3 +51,20 @@ AxiomCart already demonstrates WebRTC streaming STT and PCM TTS. The local Pytho
 
 ## Safety / limitations
 This is a learning demo: no user authentication, persistent conversation state, production VAD, automatic noise calibration, or retry policy. It records audio locally to `recording.wav` and generated speech to `reply.wav`. Delete these after class if needed. The loop may time out in a silent room after 15 seconds. Use headphones to prevent speaker echo in more advanced full-duplex exercises.
+
+
+## Instructor quality bar
+The learning material in [the workshop index](../README.md) is the canonical sequence. Before each command, state the problem and ask students to predict the outcome. After running it, explain the mechanism and discuss the production tradeoff. Avoid unexplained copy/paste or treating successful API calls as understanding.
+
+### Environment and verification
+The code has been committed but **has not been run against a physical microphone or live API in this chat**. Before class, run `python -m pytest tests -q`, then every command in the exercise table using a valid API key. If an API/model configuration differs in your account, update the example and retest. Do not claim the production features are already implemented locally.
+
+### Expected failure scenarios to demonstrate
+- Record in background noise: amplitude detection may treat noise as speech.
+- Say a product ID or price: transcription and pronunciation may be wrong.
+- Speak with a long pause: a short silence threshold can cut off the utterance.
+- Interrupt playback: the half-duplex loop ignores the user until playback ends.
+- Remove the API key: network inference should fail clearly rather than silently.
+
+### Success criteria
+Students can draw the audio→text→text→audio boundaries, explain the timing of each stage, identify one concrete failure at every boundary, and describe one production mitigation without assuming a framework magically removes the problem.
