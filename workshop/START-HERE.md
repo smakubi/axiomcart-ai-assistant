@@ -45,3 +45,10 @@ Add `OPENAI_API_KEY` to `.env`. On Windows, activate with `.venv\\Scripts\\activ
 **Next after the cascade:** Follow the [streaming TTS exercise](local/README.md#next-exercise-streaming-tts-step-by-step) to compare first-audio latency with total playback time.
 
 **Scope:** The local implementation includes batch exercises, progressive PCM TTS playback, and a half-duplex loop. Streaming STT and barge-in remain future extensions. Microphone and API smoke tests remain to be done before class.
+
+## After the runnable loop: two separate design lessons
+
+- [Full duplex](07-production-conversation.md#full-duplex--can-input-and-output-run-at-the-same-time): keep microphone input and speaker output active simultaneously.
+- [Interruption / barge-in](07-production-conversation.md#interruption--barge-in--what-should-happen-when-the-user-takes-over): detect the user taking over, stop the old reply, discard stale audio, and capture the correction.
+
+These are guided design sections. The current Python loop remains half duplex; `tts-stream` adds progressive playback, not voice-triggered interruption.
