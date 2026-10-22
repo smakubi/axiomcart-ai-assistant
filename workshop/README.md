@@ -47,6 +47,7 @@ Avoid claiming a threshold, model, sample rate, or transport is universally best
 | [05. Speech synthesis](05-production-tts.md) | Response is text, not sound | `python voice.py tts` | Voices, chunking, PCM, output playback |
 | [06. Latency](06-production-latency.md) | Assistant feels slow | `python voice.py cascade` | First-audio latency, instrumentation, streaming |
 | [07. Conversation](07-production-conversation.md) | Assistant cannot be interrupted | `python voice.py loop` | Duplex, cancellation, echo, state machines |
+| [09. Voice transports](09-voice-transports.md) | Live audio must cross a network | Draw the streaming HTTP / WebSocket / WebRTC paths | Media transport versus full duplex and barge-in |
 | [08. Frameworks](08-livekit-pipecat.md) | Custom orchestration grows complex | Compare implementations | LiveKit, Pipecat, transport/processor tradeoffs |
 
 All commands run from `workshop/local` after following [local setup](local/README.md). **The Python exercises implement batch inference and a local silence-based loop.** The next [local streaming TTS exercise](local/README.md#next-exercise-streaming-tts-step-by-step), `python voice.py tts-stream`, adds progressive PCM playback with first-audio timing and cancellation. Streaming STT and barge-in remain production extensions.

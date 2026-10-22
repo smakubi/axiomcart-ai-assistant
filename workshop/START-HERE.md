@@ -52,3 +52,7 @@ Add `OPENAI_API_KEY` to `.env`. On Windows, activate with `.venv\\Scripts\\activ
 - [Interruption / barge-in](07-production-conversation.md#interruption--barge-in--what-should-happen-when-the-user-takes-over): detect the user taking over, stop the old reply, discard stale audio, and capture the correction.
 
 These are guided design sections. The current Python loop remains half duplex; `tts-stream` adds progressive playback, not voice-triggered interruption.
+
+## How audio travels between devices
+
+Read [WebSocket and WebRTC](09-voice-transports.md) after the full-duplex and interruption sections. Compare streaming HTTP, two-way messages, and real-time media; distinguish transport from STT/TTS and turn-taking. This is a design lesson, not a new local command.
