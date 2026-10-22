@@ -31,7 +31,8 @@ Add `OPENAI_API_KEY` to `.env`. On Windows, activate with `.venv\\Scripts\\activ
 | 5 · Cascade | `python voice.py cascade` | Why does it feel slow? | First-audio latency, streaming |
 | 6 · VAD | `python voice.py vad --silence-ms 200` | Why are pauses cut off? | Endpointing, noise, thresholds |
 | 7 · Loop | `python voice.py loop` | Why can't we interrupt? | Duplex, cancellation, echo |
-| 8 · Frameworks | [LiveKit vs Pipecat](08-livekit-pipecat.md) | Why use a framework? | Sessions, transports, processors |
+| 8 · Streaming TTS | `python voice.py tts-stream` | Can playback start before the full reply arrives? | PCM framing, buffering, cancellation |
+| 9 · Frameworks | [LiveKit vs Pipecat](08-livekit-pipecat.md) | Why use a framework? | Sessions, transports, processors |
 
 **Try this:** For VAD, rerun with `--silence-ms 1200`. Which version cuts you off? Which feels slower?
 
@@ -41,4 +42,6 @@ Add `OPENAI_API_KEY` to `.env`. On Windows, activate with `.venv\\Scripts\\activ
 - [Local Python source](local/voice.py) · [Setup details](local/README.md)
 - [Real AxiomCart STT/TTS](../src/speech_api.py) · [Browser audio](../public/assets/live-transcription.mjs)
 
-**Scope:** The local implementation is a batch, half-duplex teaching demo. Streaming STT, live TTS playback, and barge-in are explained but not implemented locally. Microphone and API smoke tests remain to be done before class.
+**Next after the cascade:** Follow the [streaming TTS exercise](local/README.md#next-exercise-streaming-tts-step-by-step) to compare first-audio latency with total playback time.
+
+**Scope:** The local implementation includes batch exercises, progressive PCM TTS playback, and a half-duplex loop. Streaming STT and barge-in remain future extensions. Microphone and API smoke tests remain to be done before class.

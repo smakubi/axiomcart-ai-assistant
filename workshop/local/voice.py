@@ -114,6 +114,54 @@ def speak(client, text, output="reply.wav"):
     play_wav(output)
 
 
+def speak_stream(client, text):
+    """Play PCM progressively with backpressure and at most one partial sample.
+
+    First-audio measures device submission, not acoustic onset.
+    """
+    start = time.perf_counter()
+    first_audio_ms = None
+    underflows = 0
+    pending = b""
+    print("Playing AI-generated speech. Ctrl+C to stop.")
+    with client.audio.speech.with_streaming_response.create(
+        model=os.getenv("VOICE_TTS_MODEL", "gpt-4o-mini-tts"),
+        voice=os.getenv("VOICE_TTS_VOICE", "marin"),
+        input=text,
+        response_format="pcm",
+    ) as response:
+        # Speech PCM is 24 kHz mono signed 16-bit little-endian, without a header.
+        with sd.RawOutputStream(samplerate=24000, channels=1, dtype="int16") as stream:
+            try:
+                for chunk in response.iter_bytes(chunk_size=960):  # 20 ms of PCM
+                    pending += chunk
+                    complete = len(pending) - len(pending) % 2
+                    if not complete:
+                        continue
+                    # PortAudio uses native endian int16, including on big-endian hosts.
+                    audio = np.frombuffer(pending[:complete], dtype="<i2").astype(
+                        np.int16, copy=False).tobytes()
+                    pending = pending[complete:]
+                    if first_audio_ms is None:
+                        first_audio_ms = (time.perf_counter() - start) * 1000
+                        print(f"First audio submitted to speaker: {first_audio_ms:.0f} ms")
+                    if stream.write(audio):
+                        underflows += 1
+                if pending:
+                    raise RuntimeError("TTS returned an incomplete 16-bit PCM sample.")
+                if first_audio_ms is None:
+                    raise RuntimeError("No audio returned by TTS.")
+            except BaseException:
+                # Discard queued sound on errors/Ctrl+C; contexts close device and HTTP.
+                stream.abort()
+                raise
+            # Normal context exit drains queued sound before closing.
+    print(f"TTS request + playback: {(time.perf_counter() - start) * 1000:.0f} ms")
+    print("First-audio timing excludes device/output latency; total includes playback.")
+    if underflows:
+        print(f"Warning: {underflows} speaker underflow(s); network/device gaps may be audible.")
+
+
 def play_wav(path):
     with wave.open(str(path), "rb") as f:
         rate = f.getframerate()
@@ -147,7 +195,9 @@ def cascade(client, samples):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("stage", choices=["record", "stt", "llm", "tts", "cascade", "vad", "loop"])
+    parser.add_argument("stage", choices=[
+        "record", "stt", "llm", "tts", "tts-stream", "cascade", "vad", "loop",
+    ])
     parser.add_argument("--seconds", type=float, default=5)
     parser.add_argument("--threshold", type=float, default=0.025)
     parser.add_argument("--silence-ms", type=int, default=700)
@@ -173,6 +223,11 @@ def main():
         print(think(client, args.text))
     elif args.stage == "tts":
         speak(client, args.text)
+    elif args.stage == "tts-stream":
+        try:
+            speak_stream(client, args.text)
+        except KeyboardInterrupt:
+            print("\nStopped.")
     elif args.stage == "cascade":
         cascade(client, samples)
     elif args.stage == "loop":

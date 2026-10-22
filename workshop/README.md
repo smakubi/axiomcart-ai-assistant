@@ -49,7 +49,7 @@ Avoid claiming a threshold, model, sample rate, or transport is universally best
 | [07. Conversation](07-production-conversation.md) | Assistant cannot be interrupted | `python voice.py loop` | Duplex, cancellation, echo, state machines |
 | [08. Frameworks](08-livekit-pipecat.md) | Custom orchestration grows complex | Compare implementations | LiveKit, Pipecat, transport/processor tradeoffs |
 
-All commands run from `workshop/local` after following [local setup](local/README.md). **The Python exercises implement batch inference and a local silence-based loop.** They do not yet implement true streaming STT, chunk-by-chunk audible TTS, or barge-in. Those are taught as production extensions, not mislabeled as completed functionality.
+All commands run from `workshop/local` after following [local setup](local/README.md). **The Python exercises implement batch inference and a local silence-based loop.** The next [local streaming TTS exercise](local/README.md#next-exercise-streaming-tts-step-by-step), `python voice.py tts-stream`, adds progressive PCM playback with first-audio timing and cancellation. Streaming STT and barge-in remain production extensions.
 
 ## How to facilitate
 Have learners write down three columns: **observation**, **hypothesis**, **change**. Ask for a prediction before each experiment. Run the same test twice when comparing parameters. Pause after each section and have one learner explain the mechanism without using the library's name.

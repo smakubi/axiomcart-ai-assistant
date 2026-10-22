@@ -27,6 +27,7 @@ On Windows activate with `.venv\\Scripts\\activate`.
 | 5. Cascade | `python voice.py cascade` | Which stage makes us wait? |
 | 6. Silence | `python voice.py vad --silence-ms 700` | What happens if the user pauses mid-sentence? |
 | 7. Loop | `python voice.py loop` | Why is this turn-based, not full duplex? |
+| 8. Streaming TTS | `python voice.py tts-stream --text "Welcome to AxiomCart"` | Can sound start before generation finishes? |
 
 Run offline unit tests: `python -m pytest tests -q`.
 
@@ -46,18 +47,39 @@ Run offline unit tests: `python -m pytest tests -q`.
 - `voice.py:SilenceDetector` ↔ `public/assets/live-transcription.mjs:TurnDetector`
 - Local WAV files ↔ browser MediaStream/WebRTC transport
 
-## Streaming and interruptions: conceptual next step
-AxiomCart already demonstrates WebRTC streaming STT and PCM TTS. The local Python CLI intentionally does not claim to implement streaming STT, progressive PCM playback, or barge-in. For a genuine streaming lesson, add an async producer/consumer architecture and measure time-to-first-audio. Never mistake downloading a complete WAV via a streaming HTTP response for real-time playback.
+## Next exercise: streaming TTS, step by step
+
+Already ran the cascade? From your repository root, update the workshop branch:
+
+```bash
+git switch workshop/voice-cascade
+git pull --ff-only origin workshop/voice-cascade
+cd workshop/local
+source .venv/bin/activate
+python voice.py --help
+```
+
+Keep your existing `.env`. No new dependencies, browser, or framework is needed.
+
+1. **Predict:** `tts` downloads a full WAV before playback. When could a streaming player start? Does streaming shorten the spoken sentence?
+2. **Run the baseline:** `python voice.py tts --text "Welcome to AxiomCart. Let me help you find a comfortable pair of shoes for your next long walk."`
+3. **Run progressively:** `python voice.py tts-stream --text "Welcome to AxiomCart. Let me help you find a comfortable pair of shoes for your next long walk."`
+4. **Observe:** Listen for playback beginning while audio is still arriving. Read **First audio submitted to speaker**, measured from just before the request to the first playable chunk submitted. Device startup and network wait are included; device/output latency is not. This is an estimate of first-audio latency, not a microphone measurement of audible onset. **TTS request + playback** ends after the speaker drains; it includes the spoken duration, not just generation. Results vary across calls.
+5. **Explain:** The API sends headerless 24 kHz mono signed 16-bit little-endian PCM ([format reference](https://developers.openai.com/api/docs/guides/text-to-speech)). Each sample needs two bytes. The iterator asks for 960-byte chunks (20 ms), and the player carries a split sample into the next chunk. It writes complete samples immediately rather than saving `reply.wav`. Blocking speaker writes provide backpressure; application buffering is a chunk plus at most one leftover byte, not the whole utterance.
+6. **Try cancellation:** Use a longer phrase and press Ctrl+C during playback. Queued audio is aborted, the device and HTTP response close, and the command returns. Retry to verify the device is available again. Empty audio or a final incomplete sample raises a clear error; API/device errors propagate after cleanup.
+7. **Discuss the tradeoff:** Small chunks favor a quick start but network pauses can cause audible gaps. Speaker underflows are reported. A bounded producer/consumer jitter buffer is a future refinement. This streams audio output from a complete text prompt; STT and LLM output are still batch, and the loop remains half-duplex without barge-in.
+
+If `tts-stream` is an invalid choice, verify `git branch --show-current` and `git log -1`, then repeat the pull above. If the device cannot open at 24 kHz, check `python -m sounddevice` and your default speaker settings. Never play this PCM at the microphone's 16 kHz rate: that changes speed and pitch. The voice is AI-generated.
 
 ## Safety / limitations
-This is a learning demo: no user authentication, persistent conversation state, production VAD, automatic noise calibration, or retry policy. It records audio locally to `recording.wav` and generated speech to `reply.wav`. Delete these after class if needed. The loop may time out in a silent room after 15 seconds. Use headphones to prevent speaker echo in more advanced full-duplex exercises.
+This is a learning demo: no user authentication, persistent conversation state, production VAD, automatic noise calibration, or retry policy. It records audio locally to `recording.wav` and batch generated speech to `reply.wav`; `tts-stream` plays without saving a file. Delete these after class if needed. The loop may time out in a silent room after 15 seconds. Use headphones to prevent speaker echo in more advanced full-duplex exercises.
 
 
 ## Instructor quality bar
 The learning material in [the workshop index](../README.md) is the canonical sequence. Before each command, state the problem and ask students to predict the outcome. After running it, explain the mechanism and discuss the production tradeoff. Avoid unexplained copy/paste or treating successful API calls as understanding.
 
 ### Environment and verification
-The code has been committed but **has not been run against a physical microphone or live API in this chat**. Before class, run `python -m pytest tests -q`, then every command in the exercise table using a valid API key. If an API/model configuration differs in your account, update the example and retest. Do not claim the production features are already implemented locally.
+Offline verification for the streaming addition: 14 local Python tests and 10 repository JavaScript tests passed. The broader Python suite passed 30 tests with one existing health-model expectation mismatch (`GLM-4.7` versus configured `GLM-5.3-Flash`). **Physical speakers/microphone and live API playback have not been verified in this chat**. Before class, run `python -m pytest tests -q`, then every command in the exercise table using a valid API key. If an API/model configuration differs in your account, update the example and retest. Do not claim the production features are already implemented locally.
 
 ### Expected failure scenarios to demonstrate
 - Record in background noise: amplitude detection may treat noise as speech.
