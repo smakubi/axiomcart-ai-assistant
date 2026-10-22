@@ -47,6 +47,10 @@ Run offline unit tests: `python -m pytest tests -q`.
 - `voice.py:SilenceDetector` ↔ `public/assets/live-transcription.mjs:TurnDetector`
 - Local WAV files ↔ browser MediaStream/WebRTC transport
 
+## Runnable advanced exercises
+
+Continue with [full duplex, barge-in, WebSocket, and WebRTC](LIVE-EXERCISES.md). These now have separate runnable commands and a local transport comparison page. Use headphones and start with the offline diagnostic. The original `loop` remains the half-duplex baseline.
+
 ## Next exercise: streaming TTS, step by step
 
 Already ran the cascade? From your repository root, update the workshop branch:

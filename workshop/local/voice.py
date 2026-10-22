@@ -4,6 +4,7 @@ The microphone/speaker are on the local computer, unlike AxiomCart's browser.
 Inference calls use OpenAI APIs. No LangGraph or JavaScript required.
 """
 import argparse
+import asyncio
 import os
 import time
 import wave
@@ -65,7 +66,7 @@ class SilenceDetector:
 def record_until_silence(threshold=0.025, silence_ms=700, max_seconds=15):
     """Capture microphone frames until quiet follows detected sound.
 
-    Pre-roll retains a little audio before threshold crossing.
+    All frames from capture startup are retained, including leading quiet.
     """
     detector = SilenceDetector(threshold, silence_ms, int(max_seconds * 1000))
     frames = []
@@ -197,12 +198,29 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("stage", choices=[
         "record", "stt", "llm", "tts", "tts-stream", "cascade", "vad", "loop",
+        "duplex", "barge-in", "transport-server",
     ])
     parser.add_argument("--seconds", type=float, default=5)
     parser.add_argument("--threshold", type=float, default=0.025)
     parser.add_argument("--silence-ms", type=int, default=700)
     parser.add_argument("--text", default="Hello! Welcome to AxiomCart.")
+    parser.add_argument("--offline", action="store_true",
+                        help="New live exercises: use a tone instead of paid API calls")
+    parser.add_argument("--port", type=int, default=8765)
     args = parser.parse_args()
+    if args.stage == "transport-server":
+        from transport_server import serve
+        serve(args)
+        return
+    if args.stage in ("duplex", "barge-in"):
+        if not args.offline and not os.getenv("OPENAI_API_KEY"):
+            parser.error("Set OPENAI_API_KEY in workshop/local/.env or use --offline")
+        from native_live import run_native
+        try:
+            asyncio.run(run_native(args))
+        except KeyboardInterrupt:
+            print("\nStopped.")
+        return
     if args.stage in ("record", "cascade"):
         samples = record_fixed(args.seconds)
         save_wav("recording.wav", samples)

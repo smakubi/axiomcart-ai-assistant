@@ -81,5 +81,8 @@ Use VAD plus turn detection, echo suppression, barge-in policies, cancellable st
 ## Check for understanding
 **What must keep running while TTS is speaking if interruptions are allowed?** Have the learner answer in their own words and point to the relevant function in the code.
 
-## Scope and honesty
-This chapter uses the runnable local baseline. It does not imply that production-grade behavior described above is implemented in the local demo. The advanced capability is a design exercise unless a separate runnable implementation and test are provided.
+## Run the implementation
+
+Follow the [live exercise guide](local/LIVE-EXERCISES.md): `python voice.py duplex`, then `python voice.py barge-in`. Both capture and play concurrently; only the latter cancels a reply when the user speaks. Use headphones and begin with `--offline` to test cancellation with a tone.
+
+The original `loop` above stays unchanged as the comparison baseline. The new implementation is a bounded teaching demo with an energy detector, not production VAD or native acoustic echo cancellation.

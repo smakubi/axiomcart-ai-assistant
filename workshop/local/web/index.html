@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AxiomCart voice transport workshop</title>
+<style>
+body{font:17px system-ui;max-width:850px;margin:40px auto;padding:0 20px;background:#f7faf9;color:#18342d}h1{font-size:2rem}button,select{font:inherit;padding:10px;margin:8px 8px 8px 0}pre{white-space:pre-wrap;background:#fff;padding:20px;min-height:180px;border:1px solid #bdd4cb;border-radius:8px}label{display:inline-block;margin:8px 16px 8px 0}#status{font-weight:600}button:disabled{opacity:.5}
+</style>
+<h1>Listen, speak, interrupt</h1>
+<p>Compare the same Python voice pipeline over two transports. Use headphones. The assistant voice is AI-generated. Offline mode plays a quiet tone instead of calling AI.</p>
+<label>Transport <select id="transport"><option value="ws">WebSocket — PCM + events</option><option value="rtc">WebRTC — media + data channel</option></select></label>
+<label><input type="checkbox" id="barge" checked> Stop the reply when I speak (barge-in)</label>
+<div><button id="start">Start microphone</button><button id="stop" disabled>End session</button><button id="cancel" disabled>Stop reply</button></div>
+<p id="status" role="status">Disconnected</p>
+<audio id="remote" autoplay></audio>
+<p>Unchecked: the microphone stays active, and one new turn waits for the current reply to finish. Checked: speaking cancels the old reply. Say a complete request, then pause. Each request is independent; this exercise has no conversation memory.</p>
+<pre id="log" aria-live="polite"></pre>
+<p>WebSocket sends 24 kHz mono PCM in 20 ms chunks; playback acknowledgments bound the output backlog. WebRTC uses a media track; the browser and Python media stack handle codecs and packet timing. Both need the same turn and cancellation logic. A small device/network playback tail can remain after interruption.</p>
+<script type="module" src="/client.js"></script>
+</html>

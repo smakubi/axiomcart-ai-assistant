@@ -44,15 +44,15 @@ Add `OPENAI_API_KEY` to `.env`. On Windows, activate with `.venv\\Scripts\\activ
 
 **Next after the cascade:** Follow the [streaming TTS exercise](local/README.md#next-exercise-streaming-tts-step-by-step) to compare first-audio latency with total playback time.
 
-**Scope:** The local implementation includes batch exercises, progressive PCM TTS playback, and a half-duplex loop. Streaming STT and barge-in remain future extensions. Microphone and API smoke tests remain to be done before class.
+**Scope:** The local implementation includes batch exercises, progressive PCM TTS playback, and a half-duplex loop. The original loop remains half duplex; the new [live exercises](local/LIVE-EXERCISES.md) add concurrent input/output, barge-in, and WebSocket/WebRTC transports. Streaming STT remains a future extension. Microphone and API smoke tests remain to be done before class.
 
 ## After the runnable loop: two separate design lessons
 
 - [Full duplex](07-production-conversation.md#full-duplex--can-input-and-output-run-at-the-same-time): keep microphone input and speaker output active simultaneously.
 - [Interruption / barge-in](07-production-conversation.md#interruption--barge-in--what-should-happen-when-the-user-takes-over): detect the user taking over, stop the old reply, discard stale audio, and capture the correction.
 
-These are guided design sections. The current Python loop remains half duplex; `tts-stream` adds progressive playback, not voice-triggered interruption.
+The concepts are implemented in the [runnable live exercises](local/LIVE-EXERCISES.md): `duplex`, `barge-in`, and `transport-server`. The original loop stays half duplex for comparison.
 
 ## How audio travels between devices
 
-Read [WebSocket and WebRTC](09-voice-transports.md) after the full-duplex and interruption sections. Compare streaming HTTP, two-way messages, and real-time media; distinguish transport from STT/TTS and turn-taking. This is a design lesson, not a new local command.
+Read [WebSocket and WebRTC](09-voice-transports.md) after the full-duplex and interruption sections. Compare streaming HTTP, two-way messages, and real-time media; distinguish transport from STT/TTS and turn-taking. Then run `python voice.py transport-server --offline` to compare both transports using the [live exercise instructions](local/LIVE-EXERCISES.md).

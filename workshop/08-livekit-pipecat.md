@@ -2,6 +2,8 @@
 
 This lesson follows the runnable Python cascade in [local/README.md](local/README.md). **Run the local implementation first.** The snippets below explain framework structure; they are not stand-alone runnable applications. To run a framework, follow its official quickstart and configure its transport, model credentials, and session entrypoint.
 
+For a runnable custom implementation of the two concurrent paths and cancellation below, see the [new live exercises](local/LIVE-EXERCISES.md). Compare these with the original half-duplex loop before discussing frameworks.
+
 ## Start with the problem
 Our local code records, transcribes, thinks, synthesizes, and plays **sequentially**. What happens if the customer interrupts during playback? The microphone isn't being monitored, so the assistant cannot hear the interruption.
 

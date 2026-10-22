@@ -20,7 +20,7 @@ A transport moves data across the network. STT interprets audio, TTS creates aud
 
 `record` creates a file locally. `stt` uploads that file after recording ends. `tts-stream` reads a streaming HTTP response and plays arriving PCM chunks. That last exercise proves progressive playback does not require a WebSocket or WebRTC connection.
 
-The local CLI does not send live microphone frames while receiving speaker audio. It remains a half-duplex application even though its TTS output streams.
+The original `loop` command does not monitor the microphone during playback. The new `duplex` and `barge-in` commands add concurrent local capture/playback; the transport server below connects browser audio to the same controller.
 
 ## WebSocket — an ongoing two-way message connection
 
@@ -81,4 +81,6 @@ These describe different aspects of the same system. A WebSocket connection can 
 
 Continue to the [framework comparison](08-livekit-pipecat.md) to see which responsibilities a framework coordinates.
 
-**Scope:** This is a transport design lesson. No new WebSocket or WebRTC command is implemented in `workshop/local/voice.py`. The Python exercises remain the runnable baseline.
+## Run both transports
+
+Follow the [live exercise guide](local/LIVE-EXERCISES.md). `python voice.py transport-server --offline` serves a local page where you can select WebSocket or WebRTC and compare the same Python turn controller. Restart without `--offline` for STT/LLM/TTS calls. This implementation is for same-computer teaching; it is not a remotely deployed service.
