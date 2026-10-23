@@ -1,5 +1,5 @@
 -r requirements.txt
 fastapi>=0.117.1,<1
-uvicorn>=0.35,<1
+uvicorn[standard]>=0.35,<1
 aiortc>=1.14,<2
 httpx>=0.28,<1
