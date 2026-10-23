@@ -7,8 +7,8 @@
 body{font:17px system-ui;max-width:850px;margin:40px auto;padding:0 20px;background:#f7faf9;color:#18342d}h1{font-size:2rem}button,select{font:inherit;padding:10px;margin:8px 8px 8px 0}pre{white-space:pre-wrap;background:#fff;padding:20px;min-height:180px;border:1px solid #bdd4cb;border-radius:8px}label{display:inline-block;margin:8px 16px 8px 0}#status{font-weight:600}button:disabled{opacity:.5}
 </style>
 <h1>Listen, speak, interrupt</h1>
-<p>Compare the same Python voice pipeline over two transports. Use headphones. The assistant voice is AI-generated. Offline mode plays a quiet tone instead of calling AI.</p>
-<label>Transport <select id="transport"><option value="ws">WebSocket — PCM + events</option><option value="rtc">WebRTC — media + data channel</option></select></label>
+<p>Compare the same Python voice pipeline over two transports. Speakerphone: use WebRTC with browser echo cancellation; reduce speaker volume if you hear feedback. Native Python still works best with headphones. The assistant voice is AI-generated. Offline mode plays a quiet tone instead of calling AI.</p>
+<label>Transport <select id="transport"><option value="rtc">WebRTC — media + data channel (recommended)</option><option value="ws">WebSocket — PCM + events</option></select></label>
 <label><input type="checkbox" id="barge" checked> Stop the reply when I speak (barge-in)</label>
 <div><button id="start">Start microphone</button><button id="stop" disabled>End session</button><button id="cancel" disabled>Stop reply</button></div>
 <p id="status" role="status">Disconnected</p>

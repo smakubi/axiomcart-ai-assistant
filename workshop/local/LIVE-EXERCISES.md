@@ -1,7 +1,7 @@
 # Full duplex, barge-in, WebSocket, and WebRTC — runnable exercises
 
 These extend the existing `voice.py` exercises. Use Python 3.11+ and headphones.
-STT and LLM are still batch calls after a turn ends; TTS streams progressively.
+STT runs after a turn ends. The LLM streams text; short text segments go to streamed TTS while later text is still generated. Bounded prefetch overlaps synthesis and playback.
 The microphone now remains active while the assistant generates and plays a reply.
 
 ## 1. Update and install
@@ -49,17 +49,17 @@ Ask: “Explain how to choose walking shoes.” While the assistant speaks, say 
 python voice.py barge-in --silence-ms 700
 ```
 
-Repeat the previous request and correction. After about 120 ms of sustained sound above the threshold, the controller stops queued playback and cancels the current async request. It retains the beginning of the correction, waits for your silence, then answers the correction. Detection/device buffering adds latency, so cancellation is not acoustically instantaneous.
+Repeat the previous request and correction. After confirming speech in a 500 ms voting window, the controller stops queued playback and cancels the current async request. It retains the beginning of the correction, waits for your silence, then answers the correction. Detection/device buffering adds latency, so cancellation is not acoustically instantaneous.
 
 **Explain these distinct timers:**
 
 - `--threshold 0.025`: loudness needed to count as sound, not a probability of speech.
-- Sound confirmation: 120 ms above threshold before taking the turn. A brief click should not interrupt.
-- `--silence-ms 700`: quiet after detected sound before sending the user's completed turn to STT.
-- Pre-roll: up to 200 ms of prior input retained so the sound-confirmation delay does not lose the start.
+- Live sound confirmation: 240 ms for an idle turn, a 500 ms window during a reply (80% speech votes, allowing short quiet gaps). WebRTC VAD classifies speech; an echo-reference guard rejects strongly correlated playback leakage. Offline tone diagnostics retain the simpler 120 ms energy detector.
+- `--silence-ms 450` (new live default): quiet after detected speech before sending the user's completed turn to STT.
+- Pre-roll: up to 600 ms of prior input retained in live mode so the sound-confirmation delay does not lose the start.
 - Maximum captured turn: 15 seconds. Continuous noise may reach that limit.
 
-Try `--silence-ms 200` versus `1200`. Lowering this setting changes endpointing, not how long speech must last to interrupt. To reduce background-triggered interruptions, try a higher `--threshold`; raising it too far misses quiet speech. These commands use a teaching energy detector, not production VAD.
+Try `--silence-ms 200` versus `1200`. Lowering this setting changes endpointing, not how long speech must last to interrupt. To reduce background-triggered interruptions, try a higher `--threshold`; raising it too far misses quiet speech. The speech classifier and echo-reference guard supplement browser echo cancellation. They do not replace an acoustic echo canceller; noisy rooms and double talk still need device testing.
 
 ## 5. Run the WebSocket transport
 
@@ -67,7 +67,7 @@ Try `--silence-ms 200` versus `1200`. Lowering this setting changes endpointing,
 python voice.py transport-server --offline
 ```
 
-Open **http://127.0.0.1:8765** in a current browser on the same computer. Select **WebSocket**, keep barge-in checked, click **Start microphone**, and allow microphone access. Speak, pause, listen for the tone, then interrupt it. Click **End session** before changing transports.
+Open **http://127.0.0.1:8765** in a current browser on the same computer. WebRTC is selected by default for speakerphone use. For the message-framing comparison, select **WebSocket**, keep barge-in checked, click **Start microphone**, and allow microphone access. Speak, pause, listen for the tone, then interrupt it. Click **End session** before changing transports.
 
 **Explain:** The browser sends 24 kHz mono int16 PCM in 20 ms binary frames. Python does turn detection and reply control. Output audio and status events return as WebSocket messages. The browser acknowledges played chunks, limiting output to five chunks (100 ms) in flight instead of accumulating unlimited audio. The microphone's send buffer is also capped; overload ends the session rather than silently corrupting a turn.
 
@@ -89,7 +89,7 @@ Stop the server with Ctrl+C and restart without `--offline`:
 python voice.py transport-server
 ```
 
-Reload the page and repeat both transports. Your server `.env` supplies the key; no API key is sent to the browser. Audio/text are sent to the configured OpenAI APIs. The browser uses a small amount of JavaScript for microphone/media access; all AI and turn-control logic remains Python. The original local CLI exercises remain Python-only.
+Reload the page and repeat both transports. Your server `.env` supplies the key; no API key is sent to the browser. Audio/text are sent to the configured OpenAI APIs. English transcription is the default; set `VOICE_STT_LANGUAGE` to another language code, or to an empty string for automatic detection. The browser uses a small amount of JavaScript for microphone/media access; all AI and turn-control logic remains Python. The original local CLI exercises remain Python-only.
 
 ## Teaching checklist
 
@@ -113,9 +113,13 @@ python -m pytest tests -q
 node --test tests/js/*.test.mjs
 ```
 
-The WebRTC integration test opens UDP sockets between real local test peers; restricted environments must allow that. Tests use synthetic microphone audio and the offline tone backend; they do not require a key. Browser tests verify resampling and clearing stale playback sources. Verification in this change: 29 local Python tests and 12 JavaScript tests passed, including real two-peer WebRTC negotiation, media, and interruption. The existing application suite passed 30 tests with one pre-existing health-model expectation mismatch (`GLM-4.7` versus configured `GLM-5.3-Flash`). Physical microphone/speaker and paid API checks remain separate manual steps above.
+Playback uses a 120 ms startup/rebuffer target; short replies flush without waiting for six frames. The browser log reports the active transport and whether echo cancellation is confirmed. Live voice barge-in will refuse to start if the browser cannot confirm echo cancellation; use a compatible browser or the native headphone exercise.
 
-- Use headphones first. Native mode has no echo cancellation; loudspeaker output can interrupt itself. Browser echo cancellation is requested but is device/browser dependent.
+The `timing` events report STT duration and time to first model text. First-output timing is still queue submission rather than acoustic onset. `speaking_part` shows each text segment submitted to TTS; `playback_gaps` reports WebRTC rebuffering. These changes reduce sequential waits but do not promise a particular network latency.
+
+The WebRTC integration test opens UDP sockets between real local test peers; restricted environments must allow that. Tests use synthetic microphone audio and the offline tone backend; they do not require a key. Browser tests verify resampling and clearing stale playback sources. Verification in this change: 38 local Python tests and 12 JavaScript tests passed, including real two-peer WebRTC negotiation, media, and interruption. The existing application suite passed 30 tests with one pre-existing health-model expectation mismatch (`GLM-4.7` versus configured `GLM-5.3-Flash`). Physical microphone/speaker and paid API checks remain separate manual steps above.
+
+- Use headphones first. Native mode has a correlation guard but no acoustic echo cancellation; loudspeaker output can interrupt itself. Browser echo cancellation is requested but is device/browser dependent.
 - Already-submitted device/network audio can leave a short audible tail after cancellation. WebRTC receiver jitter buffers cannot be synchronously cleared from this Python application.
 - Async cancellation closes local request contexts and rejects stale results; a provider may already have performed billable computation.
 - Each turn is independent. No conversation memory is maintained, so the assistant is not told it finished a reply that you interrupted.

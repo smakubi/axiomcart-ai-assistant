@@ -7,7 +7,7 @@ import time
 
 import numpy as np
 import sounddevice as sd
-from live_core import RATE, DemoBackend, LiveSession, OpenAIBackend
+from live_core import RATE, DemoBackend, LiveSession, OpenAIBackend, SpeechVAD
 from openai import AsyncOpenAI
 
 
@@ -19,6 +19,7 @@ class SpeakerBuffer:
         self.until = 0
         self.latency = 0.1
         self.underflows = 0
+        self.started = self.flushing = False
 
     def reset(self, epoch):
         with self.lock:
@@ -26,6 +27,7 @@ class SpeakerBuffer:
             while not self.queue.empty():
                 self.queue.get_nowait()
             self.until = 0
+            self.started = self.flushing = False
 
     def put(self, epoch, pcm):
         with self.lock:
@@ -37,9 +39,16 @@ class SpeakerBuffer:
         with self.lock:
             if status:
                 self.underflows += 1
+            if not self.started and (self.queue.qsize() >= 6 or self.flushing):
+                self.started = True
+            if not self.started:
+                return
             try:
                 pcm = self.queue.get_nowait()
             except queue.Empty:
+                if not self.flushing:
+                    self.started = False
+                    self.underflows += 1
                 return
             samples = np.frombuffer(pcm, dtype="<i2")
             outdata[: len(samples), 0] = samples
@@ -75,6 +84,7 @@ class NativeSink:
                 await asyncio.sleep(0.005)
 
     async def drain(self, epoch):
+        self.speaker.flushing = True
         while epoch == self.speaker.epoch:
             if self.speaker.queue.empty() and time.monotonic() >= self.speaker.until:
                 return
@@ -102,6 +112,9 @@ async def run_native(args):
         barge_in=args.stage == "barge-in",
         threshold=args.threshold,
         silence_ms=args.silence_ms,
+        speech_detector=None if args.offline else SpeechVAD(),
+        confirm_ms=120 if args.offline else 240,
+        interrupt_ms=120 if args.offline else 500,
     )
     print("Use HEADPHONES. Ctrl+C to stop. Microphone stays active during playback.")
     print("Offline tone diagnostic." if args.offline else "Assistant voice is AI-generated.")

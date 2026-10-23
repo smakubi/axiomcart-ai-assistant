@@ -16,7 +16,7 @@ from aiortc import RTCConfiguration, RTCPeerConnection, RTCSessionDescription
 from aiortc.mediastreams import AudioStreamTrack, MediaStreamError
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
-from live_core import FRAME_BYTES, DemoBackend, LiveSession, OpenAIBackend
+from live_core import FRAME_BYTES, DemoBackend, LiveSession, OpenAIBackend, SpeechVAD
 from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 
@@ -87,7 +87,12 @@ class ReplyTrack(AudioStreamTrack):
         await asyncio.sleep(max(0, self.next_at - now))
         self.next_at += 0.02
         pcm = bytes(FRAME_BYTES)
-        while not self.sink.queue.empty():
+        if not self.sink.started and (self.sink.queue.qsize() >= 6 or self.sink.flushing):
+            self.sink.started = True
+        if self.sink.started and self.sink.queue.empty() and not self.sink.flushing:
+            self.sink.started = False
+            self.sink.underruns += 1
+        while self.sink.started and not self.sink.queue.empty():
             epoch, data = self.sink.queue.get_nowait()
             if epoch == self.sink.epoch:
                 pcm = data
@@ -108,6 +113,8 @@ class RTCSink:
         self.channel = None
         self.until = 0
         self.track = ReplyTrack(self)
+        self.started = self.flushing = False
+        self.underruns = 0
 
     async def event(self, event):
         if self.channel and self.channel.readyState == "open":
@@ -118,6 +125,8 @@ class RTCSink:
         while not self.queue.empty():
             self.queue.get_nowait()
         self.until = 0
+        self.started = self.flushing = False
+        self.underruns = 0
         await self.event({"type": "reset", "epoch": epoch})
 
     async def write(self, epoch, pcm):
@@ -125,8 +134,13 @@ class RTCSink:
             await asyncio.wait_for(self.queue.put((epoch, pcm)), timeout=5)
 
     async def drain(self, epoch):
+        self.flushing = True
         while epoch == self.epoch:
             if self.queue.empty() and time.monotonic() >= self.until:
+                if self.underruns:
+                    await self.event(
+                        {"type": "playback_gaps", "text": f"{self.underruns} buffer refill(s)"}
+                    )
                 return
             await asyncio.sleep(0.01)
 
@@ -164,7 +178,14 @@ def create_app(offline=False, threshold=0.025, silence_ms=700):
         client = None if offline else AsyncOpenAI(timeout=30, max_retries=0)
         backend = DemoBackend() if offline else OpenAIBackend(client)
         session = LiveSession(
-            backend, sink, barge_in=barge_in, threshold=threshold, silence_ms=silence_ms
+            backend,
+            sink,
+            barge_in=barge_in,
+            threshold=threshold,
+            silence_ms=silence_ms,
+            speech_detector=None if offline else SpeechVAD(),
+            confirm_ms=120 if offline else 240,
+            interrupt_ms=120 if offline else 500,
         )
         return client, session
 
@@ -200,7 +221,14 @@ def create_app(offline=False, threshold=0.025, silence_ms=700):
         peers[ident] = shutdown
         try:
             client, session = resources(sink, socket.query_params.get("barge_in", "1") == "1")
-            await sink.event({"type": "ready", "offline": offline, "rate": 24000})
+            await sink.event(
+                {
+                    "type": "ready",
+                    "offline": offline,
+                    "rate": 24000,
+                    "text": "WebSocket PCM; bounded playback window",
+                }
+            )
             deadline = time.monotonic() + 600
             while time.monotonic() < deadline:
                 message = await asyncio.wait_for(socket.receive(), timeout=30)
@@ -302,7 +330,15 @@ def create_app(offline=False, threshold=0.025, silence_ms=700):
 
             @channel.on("open")
             def on_open():
-                channel.send(json.dumps({"type": "ready", "offline": offline}))
+                channel.send(
+                    json.dumps(
+                        {
+                            "type": "ready",
+                            "offline": offline,
+                            "text": "WebRTC media; 120 ms startup buffer",
+                        }
+                    )
+                )
 
             @channel.on("message")
             def on_message(message):

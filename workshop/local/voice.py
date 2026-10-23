@@ -202,12 +202,14 @@ def main():
     ])
     parser.add_argument("--seconds", type=float, default=5)
     parser.add_argument("--threshold", type=float, default=0.025)
-    parser.add_argument("--silence-ms", type=int, default=700)
+    parser.add_argument("--silence-ms", type=int, default=None)
     parser.add_argument("--text", default="Hello! Welcome to AxiomCart.")
     parser.add_argument("--offline", action="store_true",
                         help="New live exercises: use a tone instead of paid API calls")
     parser.add_argument("--port", type=int, default=8765)
     args = parser.parse_args()
+    if args.silence_ms is None:
+        args.silence_ms = 450 if args.stage in ("duplex", "barge-in", "transport-server") else 700
     if args.stage == "transport-server":
         from transport_server import serve
         serve(args)

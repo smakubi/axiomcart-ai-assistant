@@ -68,6 +68,7 @@ export class EpochPlayer {
       source.disconnect();
       if (event.epoch === this.epoch) this.ack(event.seq);
     };
+    if (this.sources.size === 1) this.next = Math.max(this.next, this.context.currentTime + 0.12);
     const at = Math.max(this.context.currentTime, this.next);
     this.next = at + 0.02;
     source.start(at);

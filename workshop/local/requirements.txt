@@ -4,3 +4,4 @@ numpy>=1.26,<3
 python-dotenv>=1,<2
 pytest>=8,<10
 pytest-asyncio>=1.1,<2
+webrtcvad-wheels>=2.0.14,<3

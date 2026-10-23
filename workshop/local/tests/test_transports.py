@@ -54,8 +54,11 @@ async def test_rtc_track_discards_old_epoch_and_sends_clocked_pcm():
     assert not frame.to_ndarray().any()
     await sink.write(1, bytes([2, 0]) * 480)
     frame = await sink.track.recv()
+    assert not frame.to_ndarray().any()  # Short replies wait for drain/flush.
+    sink.flushing = True
+    frame = await sink.track.recv()
     assert (frame.to_ndarray() == 2).all()
-    assert frame.pts == 480
+    assert frame.pts == 960
     await sink.close()
 
 

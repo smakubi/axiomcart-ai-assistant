@@ -1,7 +1,8 @@
 """Transport-independent teaching engine: 24 kHz mono int16 PCM, 20 ms frames.
 
-Energy detection is deliberately simple. Use headphones; this is not acoustic
- echo cancellation or a production speech detector. No conversation memory.
+Live input uses a speech classifier plus playback-reference rejection; diagnostic
+mode retains an energy gate. Browser AEC or native headphones are still needed.
+No conversation memory or live search is provided.
 """
 
 import asyncio
@@ -9,6 +10,7 @@ import contextlib
 import io
 import math
 import os
+import re
 import time
 import wave
 from collections import deque
@@ -20,33 +22,141 @@ FRAME_MS = 20
 FRAME_BYTES = 960
 
 
+class SpeechVAD:
+    """WebRTC speech classification at 16 kHz; this is notecho cancellation."""
+
+    def __init__(self):
+        import webrtcvad
+
+        self.vad = webrtcvad.Vad(3)
+        self.positions = np.arange(320) * 1.5
+
+    def __call__(self, pcm):
+        samples = np.frombuffer(pcm, dtype="<i2").astype(np.float32)
+        # Low-pass before converting 24 kHz to the detector's supported 16 kHz.
+        filtered = np.convolve(
+            np.pad(samples, (1, 1), mode="edge"), [0.25, 0.5, 0.25], mode="valid"
+        )
+        converted = np.interp(self.positions, np.arange(480), filtered).astype("<i2")
+        return self.vad.is_speech(converted.tobytes(), 16000)
+
+
+class EchoGuard:
+    """Reject strongly correlated playback leakage, retaining two seconds of reference.
+
+    This supplements browser AEC; it cannot replace an acoustic echo canceller.
+    Correlation falls during different user speech, permitting double talk.
+    """
+
+    def __init__(self):
+        self.frames = deque(maxlen=100)
+        self.updated = 0
+
+    def add(self, pcm):
+        self.frames.append(np.frombuffer(pcm, dtype="<i2")[::3].astype(np.float32))
+        self.updated = time.monotonic()
+
+    def matches(self, pcm):
+        if not self.frames or time.monotonic() - self.updated > 2:
+            return False
+        current = np.frombuffer(pcm, dtype="<i2")[::3].astype(np.float32)
+        current -= current.mean()
+        energy = float(current @ current)
+        if energy < 160 * 25:
+            return False
+        reference = np.concatenate(self.frames)
+        n = len(current)
+        if len(reference) < n:
+            return False
+        sums = np.r_[0, np.cumsum(reference, dtype=np.float64)]
+        squares = np.r_[0, np.cumsum(reference * reference, dtype=np.float64)]
+        variance = squares[n:] - squares[:-n] - (sums[n:] - sums[:-n]) ** 2 / n
+        correlation = np.abs(np.correlate(reference, current, mode="valid"))
+        scores = correlation / np.sqrt(np.maximum(variance, 1) * energy)
+        best = int(scores.argmax())
+        return bool(scores[best] > 0.78 and energy <= variance[best] * 2.25)
+
+
+class TextChunks:
+    """Emit a first sentence/clause early, then bounded speakable text segments."""
+
+    def __init__(self):
+        self.pending = ""
+        self.first = True
+
+    def feed(self, delta):
+        self.pending += delta
+        result = []
+        while self.pending:
+            # A period inside a decimal/abbreviation is not followed by a space.
+            boundary = re.search(r"[!?;](?=\s|$)|\.(?=\s)", self.pending)
+            end = boundary.end() if boundary else 0
+            limit = 60 if self.first else 140
+            if not end and len(self.pending) >= limit:
+                end = self.pending.rfind(" ", 25, limit)
+                if end < 0 and len(self.pending) >= 240:
+                    end = len(self.pending)
+            if end <= 0:
+                break
+            part, self.pending = self.pending[:end].strip(), self.pending[end:].lstrip()
+            if part:
+                self.first = False
+                result.append(part)
+        return result
+
+    def finish(self):
+        result, self.pending = self.pending.strip(), ""
+        return result
+
+
 class TurnCapture:
     """Bounded pre-roll, 120 ms sound confirmation, silence endpoint, hard cap."""
 
-    def __init__(self, threshold=0.025, silence_ms=700, max_ms=15000):
+    def __init__(
+        self,
+        threshold=0.025,
+        silence_ms=700,
+        max_ms=15000,
+        speech_detector=None,
+        confirm_ms=120,
+        preroll_frames=10,
+    ):
         if not 0 < threshold < 1 or not 20 <= silence_ms <= 5000 or max_ms < 120:
             raise ValueError("Use threshold 0..1, silence 20..5000 ms, max >=120 ms.")
+        self.speech_detector = speech_detector
+        self.confirm_ms = confirm_ms
+        self.preroll_frames = preroll_frames
         self.threshold = threshold
         self.quiet_limit = math.ceil(silence_ms / FRAME_MS)
         self.max_frames = math.ceil(max_ms / FRAME_MS)
         self.reset()
 
     def reset(self):
-        self.preroll = deque(maxlen=10)
+        self.preroll = deque(maxlen=self.preroll_frames)
         self.frames = []
+        self.votes = deque(maxlen=250)
         self.loud = self.quiet = 0
         self.active = False
 
-    def feed(self, pcm):
+    def feed(self, pcm, confirm_ms=None):
         if len(pcm) != FRAME_BYTES:
             raise ValueError("Expected 960 bytes of 24 kHz mono int16 PCM.")
         samples = np.frombuffer(pcm, dtype="<i2").astype(np.float32) / 32768
         loud = float(np.sqrt(np.mean(samples * samples))) > self.threshold
+        if self.speech_detector is not None:
+            loud = self.speech_detector(pcm) and loud
         started = False
         if not self.active:
             self.preroll.append(pcm)
             self.loud = self.loud + 1 if loud else 0
-            if self.loud < 6:
+            needed = math.ceil((confirm_ms or self.confirm_ms) / FRAME_MS)
+            self.votes.append(loud)
+            if self.speech_detector is None:
+                confirmed = self.loud >= needed
+            else:
+                votes = list(self.votes)[-needed:]
+                confirmed = loud and len(votes) == needed and sum(votes) >= math.ceil(needed * 0.8)
+            if not confirmed:
                 return False, None
             self.active = started = True
             self.frames = list(self.preroll)
@@ -63,8 +173,11 @@ class TurnCapture:
 class LiveSession:
     """One bounded pending turn, cancellable reply, and epoch-based stale rejection."""
 
-    def __init__(self, backend, sink, barge_in=True, **capture_options):
+    def __init__(self, backend, sink, barge_in=True, interrupt_ms=120, **capture_options):
         self.backend, self.sink, self.barge_in = backend, sink, barge_in
+        self.interrupt_ms = interrupt_ms
+        self.echo = EchoGuard()
+        capture_options.setdefault("preroll_frames", max(10, math.ceil(interrupt_ms / 20) + 5))
         self.capture = TurnCapture(**capture_options)
         self.epoch = 0
         self.task = None
@@ -86,7 +199,11 @@ class LiveSession:
     async def feed(self, pcm):
         if self.closed:
             return
-        started, audio = self.capture.feed(pcm)
+        if self.echo.matches(pcm):
+            pcm = bytes(FRAME_BYTES)
+        started, audio = self.capture.feed(
+            pcm, confirm_ms=self.interrupt_ms if self.busy else self.capture.confirm_ms
+        )
         if started:
             was_busy = self.busy
             if self.barge_in:
@@ -135,6 +252,7 @@ class LiveSession:
                         "ms": round((time.perf_counter() - started) * 1000),
                     }
                 )
+            self.echo.add(pcm)
             await self.sink.write(epoch, pcm)
 
         try:
@@ -145,6 +263,8 @@ class LiveSession:
         except asyncio.CancelledError:
             raise
         except Exception as error:
+            while isinstance(error, BaseExceptionGroup):
+                error = error.exceptions[0]
             if epoch == self.epoch:
                 with contextlib.suppress(Exception):
                     await self.sink.reset(epoch)
@@ -178,12 +298,13 @@ class LiveSession:
 
 
 class OpenAIBackend:
-    """Batch STT/LLM and streamed TTS; async requests allow local cancellation."""
+    """Batch STT, streamed LLM text, and overlapping streamed speech synthesis."""
 
     def __init__(self, client):
         self.client = client
 
     async def reply(self, pcm, emit, status):
+        started = time.perf_counter()
         buffer = io.BytesIO()
         with wave.open(buffer, "wb") as wav:
             wav.setnchannels(1)
@@ -193,37 +314,85 @@ class OpenAIBackend:
         transcription = await self.client.audio.transcriptions.create(
             model=os.getenv("VOICE_STT_MODEL", "gpt-4o-mini-transcribe"),
             file=("turn.wav", buffer.getvalue(), "audio/wav"),
+            **(
+                {"language": os.getenv("VOICE_STT_LANGUAGE", "en")}
+                if os.getenv("VOICE_STT_LANGUAGE", "en")
+                else {}
+            ),
         )
         text = transcription.text.strip()
         await status("transcript", text)
         if not text:
             return
-        result = await self.client.responses.create(
-            model=os.getenv("VOICE_LLM_MODEL", "gpt-4.1-mini"),
-            instructions="You are a helpful shopping assistant. Reply in 1-3 sentences.",
-            input=text,
-            max_output_tokens=200,
-        )
-        answer = result.output_text.strip()
-        await status("answer", answer)
-        if not answer:
-            return
-        pending = b""
-        async with self.client.audio.speech.with_streaming_response.create(
-            model=os.getenv("VOICE_TTS_MODEL", "gpt-4o-mini-tts"),
-            voice=os.getenv("VOICE_TTS_VOICE", "marin"),
-            input=answer,
-            response_format="pcm",
-        ) as response:
-            async for chunk in response.iter_bytes(chunk_size=FRAME_BYTES):
-                pending += chunk
-                while len(pending) >= FRAME_BYTES:
-                    await emit(pending[:FRAME_BYTES])
-                    pending = pending[FRAME_BYTES:]
-            if len(pending) % 2:
-                raise RuntimeError("Incomplete PCM sample.")
-            if pending:
-                await emit(pending.ljust(FRAME_BYTES, b"\0"))
+        await status("timing", f"STT {round((time.perf_counter() - started) * 1000)} ms")
+        text_queue = asyncio.Queue(maxsize=2)
+        audio_queue = asyncio.Queue(maxsize=50)  # One second, bounded and cancelled together.
+
+        async def generate():
+            chunks = TextChunks()
+            answer = ""
+            first = True
+            stream = await self.client.responses.create(
+                model=os.getenv("VOICE_LLM_MODEL", "gpt-4.1-mini"),
+                instructions=(
+                    "You are a spoken shopping assistant. Reply in English in one sentence, "
+                    "at most 35 words. "
+                    "Your input is transcribed speech: acknowledge that you can receive it. "
+                    "You have no live search, inventory, product databases, images, or current "
+                    "news. Never claim to have consulted sources or know current officeholders. "
+                    "For current facts, state that you cannot verify them. Use plain spoken text."
+                ),
+                input=text,
+                max_output_tokens=160,
+                stream=True,
+            )
+            async with stream:
+                async for event in stream:
+                    if event.type == "response.output_text.delta":
+                        if first:
+                            first = False
+                            elapsed = round((time.perf_counter() - started) * 1000)
+                            await status("timing", f"First LLM text {elapsed} ms after turn")
+                        answer += event.delta
+                        for part in chunks.feed(event.delta):
+                            await text_queue.put(part)
+                    elif event.type in ("error", "response.failed", "response.incomplete"):
+                        raise RuntimeError("Text stream failed or was incomplete.")
+            if tail := chunks.finish():
+                await text_queue.put(tail)
+            await status("answer", answer.strip())
+            await text_queue.put(None)
+
+        async def synthesize():
+            while (part := await text_queue.get()) is not None:
+                pending = b""
+                await status("speaking_part", part)
+                async with self.client.audio.speech.with_streaming_response.create(
+                    model=os.getenv("VOICE_TTS_MODEL", "gpt-4o-mini-tts"),
+                    voice=os.getenv("VOICE_TTS_VOICE", "marin"),
+                    input=part,
+                    response_format="pcm",
+                ) as response:
+                    async for chunk in response.iter_bytes(chunk_size=FRAME_BYTES):
+                        pending += chunk
+                        while len(pending) >= FRAME_BYTES:
+                            await audio_queue.put(pending[:FRAME_BYTES])
+                            pending = pending[FRAME_BYTES:]
+                    if len(pending) % 2:
+                        raise RuntimeError("Incomplete PCM sample.")
+                    if pending:
+                        await audio_queue.put(pending.ljust(FRAME_BYTES, b"\0"))
+            await audio_queue.put(None)
+
+        async def play():
+            while (frame := await audio_queue.get()) is not None:
+                await emit(frame)
+
+        # One cancellation scope: no orphan LLM, TTS, or prefetched audio after barge-in.
+        async with asyncio.TaskGroup() as group:
+            group.create_task(generate())
+            group.create_task(synthesize())
+            group.create_task(play())
 
 
 class DemoBackend:

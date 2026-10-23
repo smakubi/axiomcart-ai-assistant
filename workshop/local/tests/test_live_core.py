@@ -165,15 +165,27 @@ async def test_async_backend_wav_format_and_chunk_reassembly():
         requests.append(kwargs)
         yield Response()
 
+    class TextStream:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        def __aiter__(self):
+            return self.events()
+
+        async def events(self):
+            yield SimpleNamespace(type="response.output_text.delta", delta="Try walking shoes.")
+            yield SimpleNamespace(type="response.completed")
+
     transcribe = AsyncMock(return_value=SimpleNamespace(text="Shoes"))
     client = SimpleNamespace(
         audio=SimpleNamespace(
             transcriptions=SimpleNamespace(create=transcribe),
             speech=SimpleNamespace(with_streaming_response=SimpleNamespace(create=speech)),
         ),
-        responses=SimpleNamespace(
-            create=AsyncMock(return_value=SimpleNamespace(output_text="Try walking shoes."))
-        ),
+        responses=SimpleNamespace(create=AsyncMock(return_value=TextStream())),
     )
 
     async def emit(frame):
@@ -191,7 +203,9 @@ async def test_async_backend_wav_format_and_chunk_reassembly():
     assert requests[0]["response_format"] == "pcm"
     assert len(frames) == 2 and all(len(frame) == 960 for frame in frames)
     assert b"".join(frames)[:962] == b"\x01" + b"\x02" * 960 + b"\x03"
-    assert statuses == [("transcript", "Shoes"), ("answer", "Try walking shoes.")]
+    assert ("transcript", "Shoes") in statuses
+    assert ("answer", "Try walking shoes.") in statuses
+    assert transcribe.call_args.kwargs["language"] == "en"
 
 
 @pytest.mark.asyncio

@@ -84,7 +84,14 @@ async function start() {
     state.stream.getTracks().forEach(track => track.addEventListener('ended', () => {
       if (state === active) void stop();
     }));
+    const track = state.stream.getAudioTracks()[0];
+    const settings = track.getSettings();
+    log(`Transport: ${$('transport').value === 'rtc' ? 'WebRTC media' : 'WebSocket PCM'}.`);
+    log(`Browser echo cancellation: ${settings.echoCancellation === true ? 'enabled' : 'not confirmed — use headphones'}.`);
     const barge = $('barge').checked;
+    if (barge && settings.echoCancellation !== true) {
+      throw new Error('Speakerphone barge-in requires browser echo cancellation. Enable it or use headphones with the native command.');
+    }
     if ($('transport').value === 'ws') {
       const socket = state.socket = new WebSocket(`ws://${location.host}/ws?barge_in=${barge ? 1 : 0}`);
       const send = message => {if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));};
